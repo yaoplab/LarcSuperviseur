@@ -1,0 +1,29 @@
+# Credentials
+config.ini
+.env
+secrets.env
+
+# Base de données
+*.db
+
+# Python
+__pycache__/
+*.py[codz]
+*$py.class
+*.so
+*.pyd
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+.obsidian/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
