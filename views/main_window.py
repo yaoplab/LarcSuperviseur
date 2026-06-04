@@ -188,6 +188,25 @@ class TimeSlotGrid(QWidget):
             return
         dlg = EventGenerator(self._current_student_id, timeperiod_id, slot_label, self)
         if dlg.exec():
+            data = dlg.get_data()
+            conn = db.server_conn
+            if not conn:
+                QMessageBox.warning(self, "Erreur", "Aucune connexion base de données.")
+                return
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO student_event (student_id, event_type, event_at, note, source, created_by) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (data['student_id'], data['event_type'], data['event_at'],
+                     data['note'], data['source'], session.user_id)
+                )
+                conn.commit()
+            except Exception as e:
+                log(f"_open_event_dialog insert: {e}")
+                conn.rollback()
+                QMessageBox.critical(self, "Erreur", f"Échec de l'enregistrement : {e}")
+                return
             self.window().refresh_all()
 
 
@@ -212,7 +231,8 @@ class EventGenerator(QDialog):
             try:
                 cur = conn.cursor()
                 cur.execute(
-                    "SELECT lastname || ' ' || firstname FROM larcauth_student WHERE aecuser_ptr_id = %s",
+                    "SELECT aec.last_name || ' ' || aec.first_name FROM larcauth_student s "
+                    "JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id WHERE s.aecuser_ptr_id = %s",
                     (self._student_id,)
                 )
                 r = cur.fetchone()
@@ -598,18 +618,17 @@ class MainWindow(QWidget):
                        COUNT(DISTINCT se.event_id) AS event_count,
                        COUNT(DISTINCT CASE WHEN se.event_type = 'absence' THEN se.event_id END) AS abs_count,
                        COUNT(DISTINCT CASE WHEN se.event_type = 'exit' THEN se.event_id END) AS exit_count,
-                       COUNT(DISTINCT lht.fk_student_id) AS student_count
+                       COUNT(DISTINCT s.aecuser_ptr_id) AS student_count
                 FROM larcauth_classroom c
                 JOIN larcauth_level l ON l.id = c.fk_level_id
                 JOIN larcauth_program p ON p.id = l.fk_program_id
-                LEFT JOIN larcauth_learner_has_term lht ON lht.fk_classroom_id = c.id
-                    AND lht.fk_term_id = %s AND lht.enabled = TRUE
-                LEFT JOIN student_event se ON se.student_id = lht.fk_student_id
+                LEFT JOIN larcauth_student s ON s.s_classroom_id = c.id AND s.enabled = TRUE
+                LEFT JOIN student_event se ON se.student_id = s.aecuser_ptr_id
                     AND DATE(se.event_at) BETWEEN %s AND %s
                 WHERE c.enabled = TRUE {class_filter}
                 GROUP BY c.id, c.label
                 ORDER BY c.label
-            """, (self._current_term_id, date_from, date_to))
+            """, (date_from, date_to))
 
             rows = cur.fetchall()
             self._stats_table.setRowCount(len(rows))
@@ -656,22 +675,21 @@ class MainWindow(QWidget):
 
             cur.execute(f"""
                 SELECT se.event_id,
-                       s.lastname || ' ' || s.firstname AS student_name,
+                       aec.last_name || ' ' || aec.first_name AS student_name,
                        c.label AS class_name,
                        se.event_type, se.event_at, se.note,
-                       u.lastname || ' ' || u.firstname AS created_by_name
+                       u.last_name || ' ' || u.first_name AS created_by_name
                 FROM student_event se
-                JOIN larcauth_student s ON s.id = se.student_id
-                JOIN larcauth_learner_has_term lht ON lht.fk_student_id = se.student_id
-                    AND lht.fk_term_id = %s AND lht.enabled = TRUE
-                JOIN larcauth_classroom c ON c.id = lht.fk_classroom_id
+                JOIN larcauth_student s ON s.aecuser_ptr_id = se.student_id
+                JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id
+                JOIN larcauth_classroom c ON c.id = s.s_classroom_id
                 JOIN larcauth_level l ON l.id = c.fk_level_id
                 JOIN larcauth_program p ON p.id = l.fk_program_id
                 LEFT JOIN larcauth_aecuser u ON u.id = se.created_by
                 WHERE DATE(se.event_at) BETWEEN %s AND %s {class_filter}
                 ORDER BY se.event_at DESC
                 LIMIT 500
-            """, (self._current_term_id, date_from, date_to))
+            """, (date_from, date_to))
 
             rows = cur.fetchall()
             self._history_table.setRowCount(len(rows))
@@ -728,15 +746,12 @@ class MainWindow(QWidget):
             cur = conn.cursor()
             cur.execute("""
                 SELECT s.aecuser_ptr_id,
-                       s.lastname || ' ' || s.firstname AS full_name
+                       aec.last_name || ' ' || aec.first_name AS full_name
                 FROM larcauth_student s
-                JOIN larcauth_learner_has_term lht
-                    ON lht.fk_student_id = s.aecuser_ptr_id
-                WHERE lht.fk_classroom_id = %s
-                  AND lht.fk_term_id = %s
-                  AND lht.enabled = TRUE
-                ORDER BY s.lastname
-            """, (class_id, self._current_term_id))
+                JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id
+                WHERE s.s_classroom_id = %s AND s.enabled = TRUE
+                ORDER BY aec.last_name
+            """, (class_id,))
             rows = cur.fetchall()
 
             self._students = [{'id': r[0], 'name': r[1]} for r in rows]
