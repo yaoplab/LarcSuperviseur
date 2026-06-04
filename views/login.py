@@ -1,5 +1,6 @@
 import os
 import sys
+import hashlib
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel,
                                QPushButton, QLineEdit, QComboBox,
                                QMessageBox, QApplication)
@@ -9,7 +10,6 @@ from LarcSuperviseur.common.session import session, UserRole, ConnMode
 from LarcSuperviseur.common.logger import log
 from LarcSuperviseur.views.main_window import MainWindow
 from LarcSuperviseur.common.network import detect_network
-from common.auth import AuthManager
 
 
 class LoginWindow(QWidget):
@@ -97,8 +97,9 @@ class LoginWindow(QWidget):
 
             user_id, first_name, last_name, email, pwd_hash, is_dir, is_coord, is_sup = row
 
-            # Vérifier le mot de passe
-            if not AuthManager.verify_password(email, password):
+            # Vérifier le mot de passe (SHA-256)
+            pass_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
+            if pwd_hash and pwd_hash != pass_hash:
                 QMessageBox.warning(self, "Erreur", "Mot de passe incorrect.")
                 db.disconnect_all()
                 return
