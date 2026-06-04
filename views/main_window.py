@@ -493,8 +493,12 @@ class MainWindow(QWidget):
         try:
             cur = conn.cursor()
 
-            # Terme actif
-            cur.execute("SELECT id FROM larcib_term WHERE enabled = TRUE ORDER BY id DESC LIMIT 1")
+            # Terme actif (en fonction de la date courante)
+            cur.execute("""
+                SELECT id FROM larcauth_term
+                WHERE start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE
+                LIMIT 1
+            """)
             r = cur.fetchone()
             self._current_term_id = int(r[0]) if r else 0
 
