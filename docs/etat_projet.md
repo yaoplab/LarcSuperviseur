@@ -15,7 +15,11 @@ application desktop PySide6 en structuration initiale.
 - Structure projet : `common/`, `views/`, `sql/`, `docs/`
 - Modules communs : `database.py`, `session.py`, `logger.py`, `network.py`
 - Login window : connexion Intranet avec vérification des rôles
-- Main window : tableau des événements, filtres, validation admin/coord
+- Main window : écran superviseur complet (top bar date/heure, groupes/classes, période)
+- Mode groupe : stats par classe + historique événements
+- Mode classe : cartes élèves avec photo, présence, nb sorties + emploi du temps cliquable
+- Écran génération d'événement (clic élève + créneau)
+- Rafraîchissement automatique toutes les 30s
 
 ## 3. En cours
 

@@ -9,7 +9,7 @@ def _find_cfg() -> str:
     here = os.path.dirname(os.path.abspath(__file__))
     candidates = [
         os.path.join(here, '..', 'config.ini'),
-        os.path.join(here, '..', '..', 'eLarcProf', 'config.ini'),
+        os.path.join(here, '..', '..', 'eLarcProfPy', 'config.ini'),
     ]
     for p in candidates:
         p = os.path.normpath(p)

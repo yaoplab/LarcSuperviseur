@@ -13,7 +13,7 @@
 
 CREATE TABLE IF NOT EXISTS student_event (
     event_id       INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    student_id     INTEGER NOT NULL REFERENCES larcauth_student(id)
+    student_id     INTEGER NOT NULL REFERENCES larcauth_student(aecuser_ptr_id)
                              ON DELETE CASCADE,
     agenda_day_id  INTEGER NOT NULL,  -- fk vers larcauth_agenda_day (à créer)
     event_type     TEXT NOT NULL
