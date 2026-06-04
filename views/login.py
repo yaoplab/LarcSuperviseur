@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel,
                                QMessageBox, QApplication)
 from PySide6.QtCore import Qt
 from LarcSuperviseur.common.database import db
-from LarcSuperviseur.common.session import session, UserRole, ConnMode, AuthResult
+from LarcSuperviseur.common.session import session, UserRole, ConnMode
 from LarcSuperviseur.common.logger import log
 from LarcSuperviseur.views.main_window import MainWindow
 from LarcSuperviseur.common.network import detect_network
@@ -80,43 +80,57 @@ class LoginWindow(QWidget):
                 "Vérifiez votre connexion réseau.")
             return
 
-        exists, infos = AuthManager.check_teacher_exists(email)
-        if not exists:
-            QMessageBox.warning(self, "Erreur", "Utilisateur introuvable.")
+        conn = db.server_conn
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT id, first_name, last_name, email, password, "
+                "type_director, type_coordonator, type_supervisor "
+                "FROM public.larcauth_aecuser WHERE email = %s",
+                (email,)
+            )
+            row = cur.fetchone()
+            if row is None:
+                QMessageBox.warning(self, "Erreur", "Utilisateur introuvable.")
+                db.disconnect_all()
+                return
+
+            user_id, first_name, last_name, email, pwd_hash, is_dir, is_coord, is_sup = row
+
+            # Vérifier le mot de passe
+            if not AuthManager.verify_password(email, password):
+                QMessageBox.warning(self, "Erreur", "Mot de passe incorrect.")
+                db.disconnect_all()
+                return
+
+            # Déterminer le rôle
+            if is_dir:
+                role = UserRole.ADMIN
+            elif is_coord:
+                role = UserRole.COORD
+            elif is_sup:
+                role = UserRole.SUPERVISEUR
+            else:
+                QMessageBox.warning(self, "Accès refusé",
+                    "Cette application est réservée aux superviseurs, "
+                    "coordinateurs et administrateurs.")
+                db.disconnect_all()
+                return
+
+            session.user_id = user_id
+            session.email = email
+            session.full_name = f"{first_name} {last_name}"
+            session.role = role
+            session.conn_mode = ConnMode.INTRANET
+            session.is_authenticated = True
+
+            log(f"Connexion réussie : {session.full_name} ({role.value})")
+            self._open_main_window()
+
+        except Exception as e:
+            log(f"_on_connect: {e}")
+            QMessageBox.critical(self, "Erreur", str(e))
             db.disconnect_all()
-            return
-
-        if not AuthManager.verify_password(email, password):
-            QMessageBox.warning(self, "Erreur", "Mot de passe incorrect.")
-            db.disconnect_all()
-            return
-
-        role = self._determine_role(infos)
-        if role not in (UserRole.COORD, UserRole.ADMIN, UserRole.SUPERVISEUR):
-            QMessageBox.warning(self, "Accès refusé",
-                "Cette application est réservée aux superviseurs, "
-                "coordinateurs et administrateurs.")
-            db.disconnect_all()
-            return
-
-        session.user_id = infos.get('user_id', 0)
-        session.email = email
-        session.full_name = f"{infos.get('first_name', '')} {infos.get('last_name', '')}"
-        session.role = role
-        session.conn_mode = ConnMode.INTRANET
-        session.is_authenticated = True
-
-        log(f"Connexion réussie : {session.full_name} ({role.value})")
-        self._open_main_window()
-
-    def _determine_role(self, infos: dict) -> UserRole:
-        if infos.get('is_adm'):
-            return UserRole.ADMIN
-        if infos.get('is_coordonator'):
-            return UserRole.COORD
-        if infos.get('is_secretary'):
-            return UserRole.SUPERVISEUR
-        return UserRole.SUPERVISEUR
 
     def _open_main_window(self):
         self.main = MainWindow()
