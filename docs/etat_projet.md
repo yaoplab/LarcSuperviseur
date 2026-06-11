@@ -1,30 +1,46 @@
 # État du Projet — LarcSuperviseur
 
-_Audit du 3 juin 2026 — Dernière mise à jour : 3 juin 2026_
+_Audit du 3 juin 2026 — Dernière mise à jour : 10 juin 2026_
 
 ## 1. Verdict Global
 
-✅ **Projet lancé.** Architecture définie, table `student_event` créée, DDL avec vues,
-application desktop PySide6 en structuration initiale.
+✅ **Projet bien avancé.** Application desktop PySide6 fonctionnelle avec :
+- Sidebar avec navigation par sections (Collège/Lycée) et programmes (PEI/MYP/DP/DPEn)
+- Page groupe avec KPIs + 4 graphiques QtCharts (barres absences/sorties, courbe tendance, donut présence)
+- Page classe avec cartes élèves responsive + détail élève en QStackedWidget
+- Édition feuille de présence + génération d'événements hiérarchique (3 niveaux depuis `larcauth_type_event`)
+- Emploi du temps éditable
+- 3 thèmes MD3 avec reconstruction des composants inline
 
 ## 2. Terminé
 
 - Architecture validée : INSERT only, pas de gabarit, écriture Intranet uniquement
 - Table `student_event` : DDL complet avec CHECK, clés étrangères, index
 - Vues de synthèse : `student_daily_summary`, `student_alerts`
-- Structure projet : `common/`, `views/`, `sql/`, `docs/`
-- Modules communs : `database.py`, `session.py`, `logger.py`, `network.py`
+- Structure projet : `common/`, `views/`, `docs/`
+- Modules communs : `database.py`, `session.py`, `logger.py`, `network.py`, `theme.py`
 - Login window : connexion Intranet avec vérification des rôles
-- Main window : écran superviseur complet (top bar date/heure, groupes/classes, période)
-- Mode groupe : stats par classe + historique événements
-- Mode classe : cartes élèves avec photo, présence, nb sorties + emploi du temps cliquable
-- Écran génération d'événement (clic élève + créneau)
+- Top bar : date, heure, état réseau bouton thème
+- **Sidebar restructurée** : 2 sections (Collège/Lycée) × 2 colonnes programmes (PEI|MYP / DP|DPEn). Headers section cliquables + headers programme cliquables
+- **Page groupe** : 4 KPIs (Total/Présents/Absents/Sorties) + barres absences par classe + barres sorties par classe + courbe tendance absences (QDateTimeAxis) + donut taux présence (QPieSeries) + stats table + historique événements
+- **Page classe** : grille cartes responsive (1-8 colonnes selon largeur) avec photo, statut, nb sorties. Clic → détail élève
+- **QStackedWidget** pour page classe : cartes (0) + détail élève (1) avec bouton ← Retour. Pas de redimensionnement des cartes
+- **Détail élève** : refactoré en `_build_student_detail()` avec QTabWidget. Onglet "Coordonnées" (photo 150×150, nom, email, tél, date entrée, KPIs, courbe absences, table événements, bouton ajouter) + onglet "Parents" (placeholder)
+- **TimetableEditor** : dialog grille Heure × Lundi-Vendredi avec QComboBox matières, UPDATE `classroom_has_timeperiod`
+- **EventGenerator** : dialog création événement avec sélection hiérarchique 3 niveaux depuis `larcauth_type_event` (4 catégories), QDateTimeEdit éditable, combo classe filtrée, checkbox "En classe" + matière conditionnelle
+- **Changement de thème** : reconstruit sidebar, détail élève, rafraîchit vue active
+- **Photos élèves** : 25 PNG redimensionnées 2268×2268 → 500×500 (LANCZOS)
 - Rafraîchissement automatique toutes les 30s
+- **Table `larcauth_type_event`** : 27 lignes INSERT, 4 catégories (Bureau BI, Médical, Sortie, Suivi)
+- **Fonctions `_event_icon()` / `_event_color()`** : support anciens mots-clés + nouveaux chemins hiérarchiques (icône + couleur par catégorie)
+- **Requêtes SQL migrées** : 6 requêtes filtrant sur event_type passées en ILIKE (compatibilité ascendante)
+- **Ouverture maximisée** : `showMaximized()` au login
+- **Colonnes événements harmonisées** : largeurs fixes cohérentes entre historique global et détail élève
+- **Fix ThemeManager** : `d.design` → var locales, `p.border` → `p.outline_variant`
 
 ## 3. En cours
 
-- Tests de connexion réelle sur l'Intranet
-- Intégration de la table `student_event` dans le daemon `LarcCloudSync` (direction unique)
+- Emploi du temps vide pour T3 (pas de créneaux `classroom_has_timeperiod` pour term_id=5/6 sur ce serveur)
 
 ## 4. Bloquant
 
@@ -32,9 +48,9 @@ application desktop PySide6 en structuration initiale.
 
 ## 5. Reste à Faire (Priorité)
 
-1. Créer la table `agenda_day` (pré-allouer les jours de l'année scolaire)
-2. Ajouter `student_event` aux tables sync du daemon `LarcCloudSync` (N1 ou N2)
-3. Tester l'écriture directe PostgreSQL depuis le desktop
+1. Navigation date avec boutons ← → jour
+2. Remplir l'emploi du temps T3 en base
+3. Adapter l'app pour PP et PYP si besoin
 4. Interface mobile Flutter (phase ultérieure)
 5. Page web admin pour consultation depuis l'extérieur (phase ultérieure)
 
@@ -42,9 +58,9 @@ application desktop PySide6 en structuration initiale.
 
 - `docs/01_architecture.md` — à jour
 - `docs/etat_projet.md` — à jour
-- `docs/historique_construction.md` — à jour
+- `docs/historique_construction.md` — à jour (itérations 1 et 2)
 - `sql/student_event.sql` — DDL + vues
 
 ---
 
-_Mémoire persistante LarcSuperviseur — 3 juin 2026_
+_Mémoire persistante LarcSuperviseur — 5 juin 2026_

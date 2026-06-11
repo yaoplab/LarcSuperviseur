@@ -136,5 +136,5 @@ class LoginWindow(QWidget):
     def _open_main_window(self):
         self.main = MainWindow()
         self.main.resize(1200, 750)
-        self.main.show()
+        self.main.showMaximized()
         self.close()

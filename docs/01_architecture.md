@@ -46,12 +46,28 @@ Intranet PostgreSQL (192.168.2.90:5432/NewLarcDB)
 | event_id | INTEGER PK | Auto-généré |
 | student_id | INTEGER FK | Référence `larcauth_student` |
 | agenda_day_id | INTEGER | Jour de l'agenda |
-| event_type | TEXT | arrival, departure, exit, return, absence, justified, late |
+| event_type | TEXT | Chemin hiérarchique : `"Catégorie > Niveau2 > Niveau3"` (ex: `"Suivi > Absence injustifiée"`) ou ancien mot-clé (`arrival`, `absence`, `exit`) |
 | event_at | TIMESTAMP | Horodatage réel du constat |
 | note | TEXT | Remarque libre (≤200 chars) |
 | created_by | INTEGER FK | Référence `larcauth_aecuser` |
 | validated_by | INTEGER FK | NULL = en attente de validation |
 | created_at | TIMESTAMP | Auto |
+
+### `larcauth_type_event` (table de référence, PostgreSQL seule)
+| Colonne | Type | Description |
+|---|---|---|
+| idtypeevent | SMALLINT PK | 100-499, groupé par catégorie |
+| type_event | VARCHAR | Catégorie niveau 1 (Bureau BI, Médical, Sortie, Suivi) |
+| Event_Niveau2 | VARCHAR | Sous-type (Violence, Malaise, Insubordination, …) |
+| Event_Niveau3 | VARCHAR | Précision (Auteur/Victime/Témoin, Envers adulte/élève, …) |
+| Enabled | BOOLEAN | Activation |
+
+Les 3 niveaux sont présentés dans l'EventGenerator sous forme de boutons progressifs :
+1. 4 boutons catégories (🔴🏥🚪👁)
+2. Sous-types Niveau 2 (apparaissent au clic sur la catégorie)
+3. Précision Niveau 3 (apparaît au clic sur le Niveau 2)
+
+Stockage dans `event_type` : chemin complet `"Catégorie > Niveau2"` (ou `"Catégorie > Niveau2 > Niveau3"`).
 
 ### Vues
 - `student_daily_summary` — résumé présence/absence par élève × jour
