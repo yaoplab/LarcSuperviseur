@@ -438,48 +438,59 @@ class EventGenerator(QDialog):
         layout.addSpacing(sp)
         layout.addWidget(QLabel("<b>Type d'événement :</b>"))
 
-        cat_meta = {
-            'Bureau BI': ('🔴', '#d32f2f', '#fff'),
-            'Médical':   ('🏥', '#1976d2', '#fff'),
-            'Sortie':    ('🚪', '#e65100', '#fff'),
-            'Suivi':     ('👁', '#f9a825', '#222'),
-        }
+        cat_colors = {'Bureau BI': '#d32f2f', 'Médical': '#1976d2', 'Sortie': '#e65100', 'Suivi': '#f9a825'}
         self._cat_group = QButtonGroup(self)
         cat_grid = QGridLayout()
-        cat_grid.setSpacing(sp)
+        cat_grid.setSpacing(10)
         cats = list(self._type_hierarchy.keys())
         for idx, cat in enumerate(cats):
-            icon, bg, fg = cat_meta.get(cat, ('●', '#888', '#fff'))
-            btn = QPushButton(f"{icon}\n{cat}")
+            bg = cat_colors.get(cat, '#888')
+            fg = '#fff' if cat != 'Suivi' else '#222'
+            btn = QPushButton(cat)
             btn.setCheckable(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setMinimumHeight(64)
             btn.setStyleSheet(
                 f"QPushButton {{ background: {bg}; color: {fg}; font-weight: bold; "
                 f"border: 2px solid {p.outline_variant}; border-radius: 10px; "
-                f"font-size: {s(10)}px; padding: 8px; }}"
-                f"QPushButton:hover {{ background: {bg}; border: 2px solid #fff; }}"
-                f"QPushButton:checked {{ border: 3px solid {'#fff' if fg == '#fff' else '#333'}; "
-                f"background: {bg}; }}"
+                f"font-size: {s(12)}px; padding: 8px 12px; }}"
+                f"QPushButton:hover {{ border: 2px solid #fff; }}"
+                f"QPushButton:checked {{ border: 3px solid #fff; background: {bg}; }}"
             )
             btn.toggled.connect(lambda checked, c=cat: self._on_cat_toggled(c) if checked else None)
             self._cat_group.addButton(btn)
             cat_grid.addWidget(btn, idx // 2, idx % 2)
         layout.addLayout(cat_grid)
 
-        self._niv2_widget = QWidget()
-        self._niv2_widget.setVisible(False)
-        self._niv2_layout = QHBoxLayout(self._niv2_widget)
-        self._niv2_layout.setContentsMargins(4, 2, 4, 2)
-        self._niv2_layout.setSpacing(6)
-        layout.addWidget(self._niv2_widget)
+        self._niv2_panel = QFrame()
+        self._niv2_panel.setVisible(False)
+        self._niv2_panel.setStyleSheet(
+            f"QFrame {{ background: {p.surface_variant}; border-radius: 8px; }}")
+        niv2_vbox = QVBoxLayout(self._niv2_panel)
+        niv2_vbox.setContentsMargins(8, 4, 8, 8)
+        niv2_vbox.setSpacing(4)
+        niv2_vbox.addWidget(QLabel(
+            "<small>Sous-type</small>",
+            styleSheet=f"color: {p.text_soft}; font-size: {s(9)}px; padding-left: 2px;"))
+        self._niv2_grid = QGridLayout()
+        self._niv2_grid.setSpacing(8)
+        niv2_vbox.addLayout(self._niv2_grid)
+        layout.addWidget(self._niv2_panel)
 
-        self._niv3_widget = QWidget()
-        self._niv3_widget.setVisible(False)
-        self._niv3_layout = QHBoxLayout(self._niv3_widget)
-        self._niv3_layout.setContentsMargins(4, 2, 4, 2)
-        self._niv3_layout.setSpacing(6)
-        layout.addWidget(self._niv3_widget)
+        self._niv3_panel = QFrame()
+        self._niv3_panel.setVisible(False)
+        self._niv3_panel.setStyleSheet(
+            f"QFrame {{ background: {p.surface_variant}; border-radius: 8px; }}")
+        niv3_vbox = QVBoxLayout(self._niv3_panel)
+        niv3_vbox.setContentsMargins(8, 4, 8, 8)
+        niv3_vbox.setSpacing(4)
+        niv3_vbox.addWidget(QLabel(
+            "<small>Précision</small>",
+            styleSheet=f"color: {p.text_soft}; font-size: {s(9)}px; padding-left: 2px;"))
+        self._niv3_grid = QGridLayout()
+        self._niv3_grid.setSpacing(8)
+        niv3_vbox.addLayout(self._niv3_grid)
+        layout.addWidget(self._niv3_panel)
 
         self._sel_label = QLabel("")
         self._sel_label.setStyleSheet(
@@ -581,76 +592,82 @@ class EventGenerator(QDialog):
         self._selected_niv2 = None
         self._selected_type_path = category
         self._populate_niv2(category)
-        self._niv3_widget.setVisible(False)
+        self._niv3_panel.setVisible(False)
         self._update_selection()
 
     def _populate_niv2(self, category: str):
-        while self._niv2_layout.count():
-            w = self._niv2_layout.takeAt(0).widget()
-            if w: w.deleteLater()
+        self._clear_grid(self._niv2_grid)
         niv2s = self._type_hierarchy.get(category, {})
         if not niv2s:
-            self._niv2_widget.setVisible(False)
+            self._niv2_panel.setVisible(False)
             return
-        self._niv2_widget.setVisible(True)
+        self._niv2_panel.setVisible(True)
         p = theme_manager.palette
         s = theme_manager.font_size
-        for niv2 in niv2s:
+        ncols = 3
+        for idx, niv2 in enumerate(niv2s):
             btn = QPushButton(niv2)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setMinimumHeight(60)
             btn.setStyleSheet(
-                f"QPushButton {{ padding: 4px 10px; border: 1px solid {p.outline_variant}; "
-                f"border-radius: 4px; font-size: {s(9)}px; background: {p.surface}; color: {p.text_strong}; }}"
+                f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
+                f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
+                f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
+                f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
                 f"QPushButton:checked {{ background: {p.primary_container}; "
                 f"border: 2px solid {p.primary}; }}"
             )
             btn.setCheckable(True)
             btn.clicked.connect(lambda checked, n=niv2, c=category: self._on_niv2_clicked(n, c))
-            self._niv2_layout.addWidget(btn)
-        self._niv2_layout.addStretch()
+            self._niv2_grid.addWidget(btn, idx // ncols, idx % ncols)
 
     def _on_niv2_clicked(self, niv2: str, category: str):
         self._selected_niv2 = niv2
         self._selected_type_path = f"{category} > {niv2}"
-        for i in range(self._niv2_layout.count()):
-            w = self._niv2_layout.itemAt(i).widget()
-            if isinstance(w, QPushButton):
-                w.setChecked(w.text() == niv2)
+        self._check_grid_button(self._niv2_grid, niv2)
         niv3s = self._type_hierarchy.get(category, {}).get(niv2, [])
         self._populate_niv3(niv3s)
         self._update_selection()
 
     def _populate_niv3(self, niv3s: list):
-        while self._niv3_layout.count():
-            w = self._niv3_layout.takeAt(0).widget()
-            if w: w.deleteLater()
+        self._clear_grid(self._niv3_grid)
         if not niv3s:
-            self._niv3_widget.setVisible(False)
+            self._niv3_panel.setVisible(False)
             return
-        self._niv3_widget.setVisible(True)
+        self._niv3_panel.setVisible(True)
         p = theme_manager.palette
         s = theme_manager.font_size
-        for niv3 in niv3s:
+        for idx, niv3 in enumerate(niv3s):
             btn = QPushButton(niv3)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setMinimumHeight(60)
             btn.setStyleSheet(
-                f"QPushButton {{ padding: 4px 10px; border: 1px solid {p.outline_variant}; "
-                f"border-radius: 4px; font-size: {s(9)}px; background: {p.surface_variant}; color: {p.text_strong}; }}"
+                f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
+                f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
+                f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
+                f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
                 f"QPushButton:checked {{ background: {p.tertiary_container}; "
                 f"border: 2px solid {p.tertiary}; }}"
             )
             btn.setCheckable(True)
             btn.clicked.connect(lambda checked, n=niv3: self._on_niv3_clicked(n))
-            self._niv3_layout.addWidget(btn)
-        self._niv3_layout.addStretch()
+            self._niv3_grid.addWidget(btn, 0, idx)
 
     def _on_niv3_clicked(self, niv3: str):
         self._selected_type_path = f"{self._selected_category} > {self._selected_niv2} > {niv3}"
-        for i in range(self._niv3_layout.count()):
-            w = self._niv3_layout.itemAt(i).widget()
-            if isinstance(w, QPushButton):
-                w.setChecked(w.text() == niv3)
+        self._check_grid_button(self._niv3_grid, niv3)
         self._update_selection()
+
+    def _clear_grid(self, grid: QGridLayout):
+        while grid.count():
+            w = grid.takeAt(0).widget()
+            if w: w.deleteLater()
+
+    def _check_grid_button(self, grid: QGridLayout, text: str):
+        for i in range(grid.count()):
+            w = grid.itemAt(i).widget()
+            if isinstance(w, QPushButton):
+                w.setChecked(w.text() == text)
 
     def _update_selection(self):
         if self._selected_type_path:
