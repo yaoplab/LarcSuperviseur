@@ -438,28 +438,34 @@ class EventGenerator(QDialog):
         layout.addSpacing(sp)
         layout.addWidget(QLabel("<b>Type d'événement :</b>"))
 
-        cat_colors = {'Bureau BI': '#d32f2f', 'Médical': '#1976d2', 'Sortie': '#e65100', 'Suivi': '#f9a825'}
+        cat_meta = {
+            'Bureau BI': ('🔴', '#d32f2f', '#fff'),
+            'Médical':   ('🏥', '#1976d2', '#fff'),
+            'Sortie':    ('🚪', '#e65100', '#fff'),
+            'Suivi':     ('👁', '#f9a825', '#222'),
+        }
         self._cat_group = QButtonGroup(self)
-        cat_layout = QHBoxLayout()
-        cat_layout.setSpacing(sp)
-        for cat in self._type_hierarchy:
-            btn = QPushButton(cat)
+        cat_grid = QGridLayout()
+        cat_grid.setSpacing(sp)
+        cats = list(self._type_hierarchy.keys())
+        for idx, cat in enumerate(cats):
+            icon, bg, fg = cat_meta.get(cat, ('●', '#888', '#fff'))
+            btn = QPushButton(f"{icon}\n{cat}")
             btn.setCheckable(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setFixedHeight(44)
-            color = cat_colors.get(cat, '#888')
-            txt_color = '#fff' if cat != 'Suivi' else '#222'
+            btn.setMinimumHeight(64)
             btn.setStyleSheet(
-                f"QPushButton {{ background: {color}; color: {txt_color}; font-weight: bold; "
-                f"border: 2px solid {p.outline_variant}; border-radius: 6px; "
-                f"font-size: {s(fs)}px; padding: 6px 12px; }}"
-                f"QPushButton:checked {{ border: 3px solid {'#fff' if cat != 'Suivi' else '#333'}; }}"
+                f"QPushButton {{ background: {bg}; color: {fg}; font-weight: bold; "
+                f"border: 2px solid {p.outline_variant}; border-radius: 10px; "
+                f"font-size: {s(10)}px; padding: 8px; }}"
+                f"QPushButton:hover {{ background: {bg}; border: 2px solid #fff; }}"
+                f"QPushButton:checked {{ border: 3px solid {'#fff' if fg == '#fff' else '#333'}; "
+                f"background: {bg}; }}"
             )
             btn.toggled.connect(lambda checked, c=cat: self._on_cat_toggled(c) if checked else None)
             self._cat_group.addButton(btn)
-            cat_layout.addWidget(btn)
-        cat_layout.addStretch()
-        layout.addLayout(cat_layout)
+            cat_grid.addWidget(btn, idx // 2, idx % 2)
+        layout.addLayout(cat_grid)
 
         self._niv2_widget = QWidget()
         self._niv2_widget.setVisible(False)
