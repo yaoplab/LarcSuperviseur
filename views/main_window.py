@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QDateEdit, QFrame, QScrollArea, QGridLayout,
     QSplitter, QDialog, QDialogButtonBox, QTextEdit,
     QButtonGroup, QSizePolicy, QListWidget, QListWidgetItem,
-    QMenu, QStackedWidget, QTabWidget, QCheckBox, QDateTimeEdit,
+    QMenu, QStackedWidget, QTabWidget, QCheckBox, QTimeEdit,
 )
 from PySide6.QtCore import Qt, QDate, QTimer, QSize, Signal, QDateTime, QTime
 from PySide6.QtGui import QColor, QBrush, QPixmap, QFont, QIcon, QPainter, QPainterPath
@@ -308,16 +308,37 @@ class EventGenerator(QDialog):
     def __init__(self, student_id: int, parent=None):
         super().__init__(parent)
         self._student_id = student_id
-        self._classrooms = []
         self._subjects = []
         self._selected_category = None
         self._selected_niv2 = None
         self._selected_type_path = None
         self._type_hierarchy = {}
+        self._student_classroom_id = None
+        self._student_classroom_label = ""
         self.setWindowTitle(f"Événement — élève #{student_id}")
         self.setMinimumWidth(600)
+        self._load_student_classroom()
         self._load_types_from_db()
         self._init_ui()
+
+    def _load_student_classroom(self):
+        conn = db.server_conn
+        if not conn:
+            return
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT s.s_classroom_id, c.label
+                FROM larcauth_student s
+                JOIN larcauth_classroom c ON c.id = s.s_classroom_id
+                WHERE s.aecuser_ptr_id = %s
+            """, (self._student_id,))
+            r = cur.fetchone()
+            if r:
+                self._student_classroom_id = r[0]
+                self._student_classroom_label = r[1]
+        except Exception as e:
+            log(f"EventGenerator._load_student_classroom: {e}")
 
     def _init_ui(self):
         layout = QVBoxLayout()
@@ -347,65 +368,71 @@ class EventGenerator(QDialog):
         info.setStyleSheet(f"font-size: {s(16)}px; padding: 8px; color: {p.text_strong};")
         layout.addWidget(info)
 
-        # --- 2. Date/Heure éditable ---
-        time_row = QHBoxLayout()
-        time_row.setSpacing(sp)
-        time_lbl = QLabel("Date / Heure :")
-        time_lbl.setStyleSheet(f"font-size: {s(fs)}px; color: {p.text_soft};")
-        self._datetime = QDateTimeEdit(QDateTime.currentDateTime())
-        self._datetime.setDisplayFormat("yyyy-MM-dd HH:mm")
-        self._datetime.setCalendarPopup(True)
-        self._datetime.setStyleSheet(
-            f"padding: 4px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
-            f"font-size: {s(fs)}px; background: {p.surface}; color: {p.text_strong};")
-        time_row.addWidget(time_lbl)
-        time_row.addWidget(self._datetime, 1)
+        # --- 2. Date et Heure séparées ---
+        dt_frame = QFrame()
+        dt_frame.setStyleSheet(
+            f"background: {p.surface_variant}; border-radius: {rd}px; padding: 6px;")
+        dt_layout = QHBoxLayout(dt_frame)
+        dt_layout.setSpacing(sp)
+
+        dt_layout.addWidget(QLabel("Date :"))
+        self._date_edit = QDateEdit(QDate.currentDate())
+        self._date_edit.setCalendarPopup(True)
+        self._date_edit.setDisplayFormat("dddd dd MMMM yyyy")
+        self._date_edit.setStyleSheet(
+            f"padding: 6px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
+            f"font-size: {s(12)}px; background: {p.surface}; color: {p.text_strong}; "
+            f"font-weight: bold;")
+        dt_layout.addWidget(self._date_edit, 1)
+
+        dt_layout.addWidget(QLabel("Heure :"))
+        self._time_edit = QTimeEdit(QTime.currentTime())
+        self._time_edit.setDisplayFormat("HH:mm")
+        self._time_edit.setStyleSheet(
+            f"padding: 6px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
+            f"font-size: {s(12)}px; background: {p.surface}; color: {p.text_strong}; "
+            f"font-weight: bold;")
+        dt_layout.addWidget(self._time_edit)
+
         self._source_label = QLabel()
         self._update_source_label()
-        time_row.addWidget(self._source_label)
-        layout.addLayout(time_row)
+        dt_layout.addWidget(self._source_label)
+        layout.addWidget(dt_frame)
 
-        # --- 3. Contexte : Classe + En classe? + Matière ---
+        # --- 3. Contexte : Matière + En classe? ---
         context_frame = QFrame()
         context_frame.setStyleSheet(
             f"background: {p.surface_variant}; border-radius: {rd}px; padding: 6px;")
-        context_layout = QVBoxLayout(context_frame)
+        context_layout = QHBoxLayout(context_frame)
         context_layout.setSpacing(sp)
 
-        # Ligne : Classe
-        class_row = QHBoxLayout()
-        class_lbl = QLabel("Classe :")
-        class_lbl.setStyleSheet(f"font-size: {s(fs)}px; color: {p.text_soft};")
-        self._class_combo = QComboBox()
-        self._class_combo.setStyleSheet(
-            f"padding: 4px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
-            f"font-size: {s(fs)}px; background: {p.surface}; color: {p.text_strong};")
-        class_row.addWidget(class_lbl)
-        class_row.addWidget(self._class_combo, 1)
-        context_layout.addLayout(class_row)
-
-        # Ligne : En classe checkbox + matière
-        inclass_row = QHBoxLayout()
         self._inclass_cb = QCheckBox("En classe")
         self._inclass_cb.setChecked(True)
         self._inclass_cb.setStyleSheet(f"font-size: {s(fs)}px; color: {p.text_strong};")
         self._inclass_cb.toggled.connect(self._on_inclass_toggled)
-        inclass_row.addWidget(self._inclass_cb)
+        context_layout.addWidget(self._inclass_cb)
+
         subj_lbl = QLabel("Matière :")
         subj_lbl.setStyleSheet(f"font-size: {s(fs)}px; color: {p.text_soft};")
         self._subject_combo = QComboBox()
         self._subject_combo.setStyleSheet(
             f"padding: 4px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
             f"font-size: {s(fs)}px; background: {p.surface}; color: {p.text_strong};")
-        inclass_row.addWidget(subj_lbl)
-        inclass_row.addWidget(self._subject_combo, 1)
-        context_layout.addLayout(inclass_row)
+        context_layout.addWidget(subj_lbl)
+        context_layout.addWidget(self._subject_combo, 1)
+        context_layout.addStretch()
+
+        # Classe info (lecture seule)
+        class_label = QLabel()
+        if self._student_classroom_id:
+            class_label.setText(f"Classe : {self._student_classroom_label}")
+            class_label.setStyleSheet(f"font-size: {s(fs)}px; color: {p.text_soft}; padding: 4px 8px;")
+        context_layout.addWidget(class_label)
 
         layout.addWidget(context_frame)
 
-        # Charger les données des combos
-        self._load_classrooms()
-        self._class_combo.currentIndexChanged.connect(self._on_class_changed)
+        # Charger les matières
+        self._load_subjects()
 
         # --- 4. Type d'événement hiérarchique ---
         layout.addSpacing(sp)
@@ -474,32 +501,10 @@ class EventGenerator(QDialog):
 
         self.setLayout(layout)
 
-    def _load_classrooms(self):
-        conn = db.server_conn
-        if not conn:
-            return
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT c.id, c.label FROM larcauth_classroom c
-                WHERE c.enabled = TRUE ORDER BY c.label
-            """)
-            self._classrooms = list(cur.fetchall())
-            self._class_combo.clear()
-            self._class_combo.addItem("— Sélectionner une classe —", None)
-            for cid, label in self._classrooms:
-                self._class_combo.addItem(label, cid)
-        except Exception as e:
-            log(f"EventGenerator._load_classrooms: {e}")
-
-    def _on_class_changed(self):
-        self._load_subjects()
-
     def _load_subjects(self):
-        cid = self._class_combo.currentData()
         self._subject_combo.clear()
         self._subject_combo.addItem("— Sélectionner une matière —", None)
-        if not cid:
+        if not self._student_classroom_id:
             return
         conn = db.server_conn
         if not conn:
@@ -507,15 +512,18 @@ class EventGenerator(QDialog):
         try:
             cur = conn.cursor()
             cur.execute("""
-                SELECT DISTINCT ls.id, ls.label
+                SELECT DISTINCT ls.id, ls.label, aec.last_name, aec.first_name
                 FROM larcauth_classroom_termsubject cts
                 JOIN larcauth_levelsubject ls ON ls.id = cts.fk_levelsubject_id
+                LEFT JOIN larcauth_teachadm ta ON ta.aecuser_ptr_id = cts.fk_teacher_id
+                LEFT JOIN larcauth_aecuser aec ON aec.id = ta.aecuser_ptr_id
                 WHERE cts.fk_classroom_id = %s AND cts.enabled = TRUE AND ls.enabled = TRUE
                 ORDER BY ls.label
-            """, (cid,))
+            """, (self._student_classroom_id,))
             self._subjects = list(cur.fetchall())
-            for sid, label in self._subjects:
-                self._subject_combo.addItem(label, sid)
+            for sid, label, tlast, tfirst in self._subjects:
+                display = f"{label} ({tlast} {tfirst})" if tlast else label
+                self._subject_combo.addItem(display, sid)
         except Exception as e:
             log(f"EventGenerator._load_subjects: {e}")
 
@@ -651,12 +659,14 @@ class EventGenerator(QDialog):
         self.accept()
 
     def get_data(self) -> dict:
+        dt = self._date_edit.dateTime()
+        dt.setTime(self._time_edit.time())
         return {
             'student_id': self._student_id,
             'event_type': self._selected_type_path,
-            'event_at': self._datetime.dateTime().toString('yyyy-MM-dd HH:mm:ss'),
-            'classroom_id': self._class_combo.currentData(),
-            'classroom_label': self._class_combo.currentText(),
+            'event_at': dt.toString('yyyy-MM-dd HH:mm:ss'),
+            'classroom_id': self._student_classroom_id,
+            'classroom_label': self._student_classroom_label,
             'in_class': self._inclass_cb.isChecked(),
             'subject_id': self._subject_combo.currentData() if self._inclass_cb.isChecked() else None,
             'subject_label': self._subject_combo.currentText() if self._inclass_cb.isChecked() else '',
