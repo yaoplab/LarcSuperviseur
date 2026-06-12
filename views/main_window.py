@@ -606,8 +606,8 @@ class EventGenerator(QDialog):
     def _on_niv2_clicked(self, niv2: str, category: str):
         self._selected_niv2 = niv2
         self._selected_type_path = f"{category} > {niv2}"
-        while self._niv2_layout.count():
-            w = self._niv2_layout.itemAt(0).widget()
+        for i in range(self._niv2_layout.count()):
+            w = self._niv2_layout.itemAt(i).widget()
             if isinstance(w, QPushButton):
                 w.setChecked(w.text() == niv2)
         niv3s = self._type_hierarchy.get(category, {}).get(niv2, [])
@@ -640,8 +640,8 @@ class EventGenerator(QDialog):
 
     def _on_niv3_clicked(self, niv3: str):
         self._selected_type_path = f"{self._selected_category} > {self._selected_niv2} > {niv3}"
-        while self._niv3_layout.count():
-            w = self._niv3_layout.itemAt(0).widget()
+        for i in range(self._niv3_layout.count()):
+            w = self._niv3_layout.itemAt(i).widget()
             if isinstance(w, QPushButton):
                 w.setChecked(w.text() == niv3)
         self._update_selection()
