@@ -6,35 +6,33 @@ from PySide6.QtWidgets import QApplication
 
 @dataclass
 class Palette:
-    primary: str = '#1565C0'
+    primary: str = '#0D47A1'
     on_primary: str = '#FFFFFF'
-    primary_container: str = '#D1E4FF'
-    secondary: str = '#625B71'
+    primary_container: str = '#90CAF9'
+    secondary: str = '#00897B'
     on_secondary: str = '#FFFFFF'
-    secondary_container: str = '#E8DEF8'
-    tertiary: str = '#7D5260'
+    secondary_container: str = '#B2DFDB'
+    tertiary: str = '#E65100'
     on_tertiary: str = '#FFFFFF'
-    tertiary_container: str = '#FFD8E4'
-    error: str = '#BA1A1A'
+    tertiary_container: str = '#FFCC80'
+    error: str = '#C62828'
     on_error: str = '#FFFFFF'
-    error_container: str = '#FFDAD6'
-    surface: str = '#FDFCFF'
-    surface_variant: str = '#E0E3E8'
-    background: str = '#FDFCFF'
-    outline: str = '#73777E'
-    outline_variant: str = '#C4C6D0'
+    error_container: str = '#FFCDD2'
+    surface: str = '#F5F7FA'
+    surface_variant: str = '#E8EAF6'
+    background: str = '#F5F7FA'
+    outline: str = '#546E7A'
+    outline_variant: str = '#B0BEC5'
     text_strong: str = '#1B1B1F'
-    text_soft: str = '#45464F'
-    text_disabled: str = '#9B9DA5'
-    error: str = '#BA1A1A'
-    error_container: str = '#FFDAD6'
+    text_soft: str = '#455A64'
+    text_disabled: str = '#90A4AE'
     success: str = '#2E7D32'
     card_bg: str = '#FFFFFF'
-    card_hover: str = '#E9ECEF'
-    header_bg: str = '#E8DEF8'
-    header_text: str = '#1D192B'
-    active: str = '#1565C0'
-    inactive: str = '#9B9DA5'
+    card_hover: str = '#E3F2FD'
+    header_bg: str = '#0D47A1'
+    header_text: str = '#FFFFFF'
+    active: str = '#0D47A1'
+    inactive: str = '#90A4AE'
 
 
 @dataclass
@@ -66,13 +64,13 @@ def _init_themes():
         name='material_light',
         label='Material Light',
         palette=Palette(
-            primary='#1565C0', on_primary='#FFFFFF', primary_container='#D1E4FF',
-            secondary='#625B71', on_secondary='#FFFFFF', secondary_container='#E8DEF8',
-            tertiary='#7D5260', on_tertiary='#FFFFFF', tertiary_container='#FFD8E4',
-            error='#BA1A1A', on_error='#FFFFFF', error_container='#FFDAD6', success='#2E7D32',
-            card_bg='#FFFFFF', card_hover='#E9ECEF',
-            header_bg='#E8DEF8', header_text='#1D192B',
-            active='#1565C0', inactive='#9B9DA5',
+            primary='#0D47A1', on_primary='#FFFFFF', primary_container='#90CAF9',
+            secondary='#00897B', on_secondary='#FFFFFF', secondary_container='#B2DFDB',
+            tertiary='#E65100', on_tertiary='#FFFFFF', tertiary_container='#FFCC80',
+            error='#C62828', on_error='#FFFFFF', error_container='#FFCDD2', success='#2E7D32',
+            card_bg='#FFFFFF', card_hover='#E3F2FD',
+            header_bg='#0D47A1', header_text='#FFFFFF',
+            active='#0D47A1', inactive='#90A4AE',
         ),
     )
 

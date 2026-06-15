@@ -112,12 +112,11 @@ class StudentCard(QFrame):
         self._photo.setAlignment(Qt.AlignCenter)
 
         pix = QPixmap(get_photo_path(student_id))
-        if not pix.isNull():
-            self._photo.setPixmap(
-                pix.scaled(100, 100, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
-            )
-        if not self._photo.pixmap() or self._photo.pixmap().isNull():
-            self._photo.setPixmap(self._make_avatar(last_name, first_name))
+        if pix.isNull() or pix.size().isNull():
+            pix = self._make_avatar(last_name, first_name)
+        else:
+            pix = pix.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._photo.setPixmap(pix)
 
         badge_layout.addWidget(self._photo)
 
@@ -586,7 +585,6 @@ class EventGenerator(QDialog):
             return
         try:
             cur = conn.cursor()
-            term_id = self._get_term_id()
             cur.execute("""
                 SELECT cts.id, cts.label, cts.fk_teacher_id,
                        aec.last_name || ' ' || aec.first_name AS teacher_name
@@ -594,9 +592,8 @@ class EventGenerator(QDialog):
                 LEFT JOIN larcauth_aecuser aec ON aec.id = cts.fk_teacher_id
                 WHERE cts.fk_classroom_id = %s
                   AND cts.enabled = TRUE
-                  AND cts.fk_term_id = %s
                 ORDER BY cts.label
-            """, (self._student_classroom_id, term_id))
+            """, (self._student_classroom_id,))
             self._subjects = list(cur.fetchall())
             p = theme_manager.palette
             s = theme_manager.font_size
@@ -1092,46 +1089,59 @@ class MainWindow(QWidget):
         self._history_group.setMinimumHeight(320)
         group_layout.addWidget(self._history_group, 1)
 
-        # -- Ligne 3 graphiques : abs | sorties | tendance --
-        bar_row = QHBoxLayout()
-        bar_row.setSpacing(8)
+        # -- Bottom row: charts (tabbed) + stats table --
+        bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(8)
+
+        self._charts_tabs = QTabWidget()
+        self._charts_tabs.setMinimumSize(420, 300)
+
+        tab_abs = QWidget()
+        tab_abs_layout = QVBoxLayout(tab_abs)
+        tab_abs_layout.setContentsMargins(0, 0, 0, 0)
         self._abs_bar_view = QChartView()
         self._abs_bar_view.setRenderHint(QPainter.Antialiasing)
-        self._abs_bar_view.setMinimumHeight(220)
         self._abs_bar_view.setObjectName("panel")
         self._abs_bar = QChart()
         self._abs_bar_view.setChart(self._abs_bar)
-        bar_row.addWidget(self._abs_bar_view)
+        tab_abs_layout.addWidget(self._abs_bar_view)
+        self._charts_tabs.addTab(tab_abs, "Absences")
 
+        tab_exit = QWidget()
+        tab_exit_layout = QVBoxLayout(tab_exit)
+        tab_exit_layout.setContentsMargins(0, 0, 0, 0)
         self._exit_bar_view = QChartView()
         self._exit_bar_view.setRenderHint(QPainter.Antialiasing)
-        self._exit_bar_view.setMinimumHeight(220)
         self._exit_bar_view.setObjectName("panel")
         self._exit_bar = QChart()
         self._exit_bar_view.setChart(self._exit_bar)
-        bar_row.addWidget(self._exit_bar_view)
+        tab_exit_layout.addWidget(self._exit_bar_view)
+        self._charts_tabs.addTab(tab_exit, "Sorties")
 
+        tab_trend = QWidget()
+        tab_trend_layout = QVBoxLayout(tab_trend)
+        tab_trend_layout.setContentsMargins(0, 0, 0, 0)
         self._trend_view = QChartView()
         self._trend_view.setRenderHint(QPainter.Antialiasing)
-        self._trend_view.setMinimumHeight(220)
         self._trend_view.setObjectName("panel")
         self._trend_chart = QChart()
         self._trend_chart.setAnimationOptions(QChart.SeriesAnimations)
         self._trend_view.setChart(self._trend_chart)
-        bar_row.addWidget(self._trend_view, 1)
-        group_layout.addLayout(bar_row)
+        tab_trend_layout.addWidget(self._trend_view)
+        self._charts_tabs.addTab(tab_trend, "Tendance")
 
-        # -- Ligne donut + stats table --
-        mid_row = QHBoxLayout()
-        mid_row.setSpacing(8)
+        tab_donut = QWidget()
+        tab_donut_layout = QVBoxLayout(tab_donut)
+        tab_donut_layout.setContentsMargins(0, 0, 0, 0)
         self._donut_view = QChartView()
         self._donut_view.setRenderHint(QPainter.Antialiasing)
-        self._donut_view.setMinimumWidth(260)
-        self._donut_view.setMinimumHeight(260)
         self._donut_view.setObjectName("panel")
         self._donut_chart = QChart()
         self._donut_view.setChart(self._donut_chart)
-        mid_row.addWidget(self._donut_view)
+        tab_donut_layout.addWidget(self._donut_view)
+        self._charts_tabs.addTab(tab_donut, "Taux présence")
+
+        bottom_row.addWidget(self._charts_tabs, 3)
 
         self._stats_group = QFrame()
         self._stats_group.setObjectName("panel")
@@ -1145,8 +1155,9 @@ class MainWindow(QWidget):
         self._stats_table.setSelectionBehavior(QTableWidget.SelectRows)
         self._stats_layout.addWidget(stats_title)
         self._stats_layout.addWidget(self._stats_table)
-        mid_row.addWidget(self._stats_group, 1)
-        group_layout.addLayout(mid_row)
+        bottom_row.addWidget(self._stats_group, 2)
+
+        group_layout.addLayout(bottom_row)
 
         # Page 1: Mode classe (cards empilées avec détail élève)
         self._class_page = QWidget()
@@ -1249,7 +1260,7 @@ class MainWindow(QWidget):
         t1_layout.setContentsMargins(4, 4, 4, 4)
         t1_layout.setSpacing(6)
 
-        # Photo + infos
+        # Photo + infos + add event button
         contact_row = QHBoxLayout()
         self._sd_photo = QLabel()
         self._sd_photo.setFixedSize(150, 150)
@@ -1276,6 +1287,19 @@ class MainWindow(QWidget):
             info_col.addWidget(w)
         info_col.addStretch()
         contact_row.addLayout(info_col, 1)
+
+        self._sd_add_btn = QPushButton("➕")
+        self._sd_add_btn.setFixedSize(100, 100)
+        self._sd_add_btn.setStyleSheet(
+            f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
+            f"border: none; border-radius: 12px; font-weight: bold; "
+            f"font-size: {s(28)}px; }}"
+            f"QPushButton:hover {{ background: {p.active}; }}")
+        self._sd_add_btn.setCursor(Qt.PointingHandCursor)
+        self._sd_add_btn.setToolTip("Ajouter un événement")
+        self._sd_add_btn.clicked.connect(self._on_add_event)
+        contact_row.addWidget(self._sd_add_btn)
+
         t1_layout.addLayout(contact_row)
 
         # KPIs
@@ -1302,14 +1326,6 @@ class MainWindow(QWidget):
             kpi_r.addWidget(f)
         t1_layout.addLayout(kpi_r)
 
-        # Chart
-        self._sd_chart_view = QChartView()
-        self._sd_chart_view.setRenderHint(QPainter.Antialiasing)
-        self._sd_chart_view.setMinimumHeight(180)
-        self._sd_chart = QChart()
-        self._sd_chart_view.setChart(self._sd_chart)
-        t1_layout.addWidget(self._sd_chart_view, 1)
-
         # Events
         evt_label = QLabel("<b>Derniers événements</b>")
         evt_label.setStyleSheet(f"font-size: {s(11)}px;")
@@ -1322,20 +1338,24 @@ class MainWindow(QWidget):
         self._sd_events.customContextMenuRequested.connect(
             lambda pos: self._show_event_context_menu(self._sd_events, pos))
         self._sd_events.cellDoubleClicked.connect(self._on_event_table_dblclick)
-        self._sd_events.setMaximumHeight(240)
         t1_layout.addWidget(evt_label)
-        t1_layout.addWidget(self._sd_events)
+        t1_layout.addWidget(self._sd_events, 1)
 
-        self._sd_add_btn = QPushButton("➕ Ajouter un événement")
-        self._sd_add_btn.setMinimumHeight(44)
-        self._sd_add_btn.setStyleSheet(
-            f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
-            f"border: none; border-radius: 8px; font-weight: bold; "
-            f"font-size: {s(13)}px; }}"
-            f"QPushButton:hover {{ background: {p.active}; }}")
-        self._sd_add_btn.setCursor(Qt.PointingHandCursor)
-        self._sd_add_btn.clicked.connect(self._on_add_event)
-        t1_layout.addWidget(self._sd_add_btn)
+        # Bottom row: chart tabs
+        self._sd_chart_tabs = QTabWidget()
+        self._sd_chart_tabs.setMinimumHeight(200)
+
+        tab_chart = QWidget()
+        tab_chart_layout = QVBoxLayout(tab_chart)
+        tab_chart_layout.setContentsMargins(0, 0, 0, 0)
+        self._sd_chart_view = QChartView()
+        self._sd_chart_view.setRenderHint(QPainter.Antialiasing)
+        self._sd_chart = QChart()
+        self._sd_chart_view.setChart(self._sd_chart)
+        tab_chart_layout.addWidget(self._sd_chart_view)
+        self._sd_chart_tabs.addTab(tab_chart, "Évolution absences")
+
+        t1_layout.addWidget(self._sd_chart_tabs)
 
         scroll1.setWidget(tab1)
 
@@ -1944,13 +1964,13 @@ class MainWindow(QWidget):
             hh.setSectionResizeMode(0, QHeaderView.Fixed);     self._history_table.setColumnWidth(0, 0)
             hh.setSectionResizeMode(1, QHeaderView.Interactive); self._history_table.setColumnWidth(1, 140)
             hh.setSectionResizeMode(2, QHeaderView.Interactive); self._history_table.setColumnWidth(2, 80)
-            hh.setSectionResizeMode(3, QHeaderView.Interactive); self._history_table.setColumnWidth(3, 180)
-            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._history_table.setColumnWidth(4, 120)
-            hh.setSectionResizeMode(5, QHeaderView.Interactive); self._history_table.setColumnWidth(5, 100)
-            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._history_table.setColumnWidth(6, 60)
-            hh.setSectionResizeMode(7, QHeaderView.Interactive); self._history_table.setColumnWidth(7, 150)
-            hh.setSectionResizeMode(8, QHeaderView.Interactive); self._history_table.setColumnWidth(8, 120)
-            hh.setSectionResizeMode(9, QHeaderView.Interactive); self._history_table.setColumnWidth(9, 60)
+            hh.setSectionResizeMode(3, QHeaderView.Interactive); self._history_table.setColumnWidth(3, 140)
+            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._history_table.setColumnWidth(4, 110)
+            hh.setSectionResizeMode(5, QHeaderView.Interactive); self._history_table.setColumnWidth(5, 110)
+            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._history_table.setColumnWidth(6, 70)
+            hh.setSectionResizeMode(7, QHeaderView.Stretch)
+            hh.setSectionResizeMode(8, QHeaderView.Interactive); self._history_table.setColumnWidth(8, 130)
+            hh.setSectionResizeMode(9, QHeaderView.Interactive); self._history_table.setColumnWidth(9, 55)
 
         except Exception as e:
             log(f"_load_global_history: {e}")
@@ -2217,9 +2237,11 @@ class MainWindow(QWidget):
             self._sd_events.setHorizontalHeaderLabels(["ID", "Type", "Lieu", "Matière", "Date", "Note", "Créé par", "Validé"])
             self._sd_events.setColumnHidden(0, True)
             for i, (eid, etype, e_at, lieu, subject, note, creator, validated) in enumerate(evts):
+                ei = _event_icon(etype)
+                color = _event_color(etype)
                 items = [
                     QTableWidgetItem(str(eid)),
-                    QTableWidgetItem(etype),
+                    QTableWidgetItem(f"{ei} {etype}"),
                     QTableWidgetItem(lieu or ''),
                     QTableWidgetItem(subject or ''),
                     QTableWidgetItem(e_at.strftime('%d/%m %H:%M') if e_at else ''),
@@ -2227,19 +2249,20 @@ class MainWindow(QWidget):
                     QTableWidgetItem(creator),
                     QTableWidgetItem("✓" if validated else ''),
                 ]
+                items[1].setForeground(QBrush(QColor(color)))
                 for it in items:
                     it.setFlags(it.flags() & ~Qt.ItemIsEditable)
                 for j, it in enumerate(items):
                     self._sd_events.setItem(i, j, it)
             hh = self._sd_events.horizontalHeader()
             hh.setSectionResizeMode(0, QHeaderView.Fixed);     self._sd_events.setColumnWidth(0, 0)
-            hh.setSectionResizeMode(1, QHeaderView.Interactive); self._sd_events.setColumnWidth(1, 180)
-            hh.setSectionResizeMode(2, QHeaderView.Interactive); self._sd_events.setColumnWidth(2, 120)
-            hh.setSectionResizeMode(3, QHeaderView.Interactive); self._sd_events.setColumnWidth(3, 100)
-            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._sd_events.setColumnWidth(4, 120)
-            hh.setSectionResizeMode(5, QHeaderView.Interactive); self._sd_events.setColumnWidth(5, 150)
-            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._sd_events.setColumnWidth(6, 120)
-            hh.setSectionResizeMode(7, QHeaderView.Interactive); self._sd_events.setColumnWidth(7, 60)
+            hh.setSectionResizeMode(1, QHeaderView.Interactive); self._sd_events.setColumnWidth(1, 120)
+            hh.setSectionResizeMode(2, QHeaderView.Interactive); self._sd_events.setColumnWidth(2, 110)
+            hh.setSectionResizeMode(3, QHeaderView.Interactive); self._sd_events.setColumnWidth(3, 110)
+            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._sd_events.setColumnWidth(4, 130)
+            hh.setSectionResizeMode(5, QHeaderView.Stretch)
+            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._sd_events.setColumnWidth(6, 130)
+            hh.setSectionResizeMode(7, QHeaderView.Interactive); self._sd_events.setColumnWidth(7, 55)
 
             # Afficher les tabs, cacher le placeholder
             self._sd_tabs.show()
@@ -2336,7 +2359,7 @@ class MainWindow(QWidget):
         # Infos
         info = QLabel(
             f"<b>{student_name}</b> — {etype}<br>"
-            f"<span style='color:{p.text_weak};font-size:{theme_manager.font_size(10)}px;'>"
+            f"<span style='color:{p.text_disabled};font-size:{theme_manager.font_size(10)}px;'>"
             f"{e_at.strftime('%d/%m/%Y %H:%M') if e_at else ''} | {lieu or ''}"
             f"{' | ' + subject if subject else ''}</span>")
         info.setWordWrap(True)
