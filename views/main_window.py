@@ -17,6 +17,7 @@ from LarcSuperviseur.common.session import session, UserRole
 from LarcSuperviseur.common.logger import log
 from LarcSuperviseur.common.network import detect_network
 from LarcSuperviseur.common.theme import theme_manager
+from LarcSuperviseur.common.photos import get_photo_path
 import os, re
 
 
@@ -91,8 +92,8 @@ class StudentCard(QFrame):
         self._name_label.setTextFormat(Qt.RichText)
         self._name_label.setAlignment(Qt.AlignCenter)
         self._name_label.setText(
-            f"<b style='font-size:{theme_manager.font_size(11)}px'>{last_name}</b><br>"
-            f"<span style='font-size:{theme_manager.font_size(10)}px; color:{theme_manager.palette.text_soft}'>{first_name}</span>"
+            f"<b style='font-size:{theme_manager.font_size(13)}px'>{last_name}</b><br>"
+            f"<span style='font-size:{theme_manager.font_size(12)}px; color:{theme_manager.palette.text_soft}'>{first_name}</span>"
         )
 
         # Badge photo (conteneur coloré)
@@ -110,13 +111,11 @@ class StudentCard(QFrame):
         self._photo.setFixedSize(100, 100)
         self._photo.setAlignment(Qt.AlignCenter)
 
-        photo_file = f"photos/{student_id}.png"
-        if os.path.isfile(photo_file):
-            pix = QPixmap(photo_file)
-            if not pix.isNull():
-                self._photo.setPixmap(
-                    pix.scaled(100, 100, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
-                )
+        pix = QPixmap(get_photo_path(student_id))
+        if not pix.isNull():
+            self._photo.setPixmap(
+                pix.scaled(100, 100, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            )
         if not self._photo.pixmap() or self._photo.pixmap().isNull():
             self._photo.setPixmap(self._make_avatar(last_name, first_name))
 
@@ -125,12 +124,12 @@ class StudentCard(QFrame):
         # Statut
         self._status_label = QLabel()
         self._status_label.setAlignment(Qt.AlignCenter)
-        self._status_label.setStyleSheet(f"font-size: {theme_manager.font_size(10)}px; font-weight: bold;")
+        self._status_label.setStyleSheet(f"font-size: {theme_manager.font_size(12)}px; font-weight: bold;")
 
         # Nb sorties
         self._exit_label = QLabel()
         self._exit_label.setAlignment(Qt.AlignCenter)
-        self._exit_label.setStyleSheet(f"font-size: {theme_manager.font_size(9)}px; color: {theme_manager.palette.text_disabled};")
+        self._exit_label.setStyleSheet(f"font-size: {theme_manager.font_size(11)}px; color: {theme_manager.palette.text_disabled};")
 
         layout.addWidget(self._name_label)
         layout.addStretch()
@@ -287,9 +286,10 @@ class TimeSlotGrid(QWidget):
             try:
                 cur = conn.cursor()
                 cur.execute(
-                    "INSERT INTO student_event (student_id, event_type, event_at, note, source, created_by) "
-                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    "INSERT INTO student_event (student_id, event_type, event_at, lieu_label, subject_label, note, source, created_by) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                     (data['student_id'], data['event_type'], data['event_at'],
+                     data['lieu_label'], data.get('subject_label', ''),
                      data['note'], data['source'], session.user_id)
                 )
                 conn.commit()
@@ -309,6 +309,10 @@ class EventGenerator(QDialog):
         super().__init__(parent)
         self._student_id = student_id
         self._subjects = []
+        self._locations = []
+        self._classroom_lieu_ids = set()
+        self._selected_lieu_id = 0
+        self._selected_lieu_label = ""
         self._selected_category = None
         self._selected_niv2 = None
         self._selected_type_path = None
@@ -340,6 +344,23 @@ class EventGenerator(QDialog):
         except Exception as e:
             log(f"EventGenerator._load_student_classroom: {e}")
 
+    def _get_term_id(self) -> int:
+        conn = db.server_conn
+        if not conn:
+            return 0
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT t.id FROM larcauth_term t, larcauth_academicyear ay
+                WHERE ay.s_id = 1 AND t.trim = ay.current_term_number
+                ORDER BY t.id LIMIT 1
+            """)
+            r = cur.fetchone()
+            return r[0] if r else 0
+        except Exception as e:
+            log(f"EventGenerator._get_term_id: {e}")
+            return 0
+
     def _init_ui(self):
         layout = QVBoxLayout()
         p = theme_manager.palette
@@ -364,9 +385,16 @@ class EventGenerator(QDialog):
                     student_name = r[0]
             except Exception:
                 pass
-        info = QLabel(f"<b>{student_name}</b>")
-        info.setStyleSheet(f"font-size: {s(16)}px; padding: 8px; color: {p.text_strong};")
-        layout.addWidget(info)
+        top_row = QHBoxLayout()
+        name_label = QLabel(f"<b>{student_name}</b>")
+        name_label.setStyleSheet(f"font-size: {s(16)}px; padding: 8px; color: {p.text_strong};")
+        top_row.addWidget(name_label)
+        if self._student_classroom_label:
+            top_row.addStretch()
+            cls_label = QLabel(f"<b>{self._student_classroom_label}</b>")
+            cls_label.setStyleSheet(f"font-size: {s(16)}px; padding: 8px; color: {p.text_soft};")
+            top_row.addWidget(cls_label)
+        layout.addLayout(top_row)
 
         # --- 2. Date et Heure séparées ---
         dt_frame = QFrame()
@@ -399,52 +427,96 @@ class EventGenerator(QDialog):
         dt_layout.addWidget(self._source_label)
         layout.addWidget(dt_frame)
 
-        # --- 3. Contexte : Matière + En classe? ---
-        context_frame = QFrame()
-        context_frame.setStyleSheet(
-            f"background: {p.surface_variant}; border-radius: {rd}px; padding: 6px;")
-        context_layout = QHBoxLayout(context_frame)
-        context_layout.setSpacing(sp)
+        # --- 3. Lieu ---
+        layout.addSpacing(sp)
+        lieu_header_row = QHBoxLayout()
+        lieu_header_row.addWidget(QLabel("<b>Lieu :</b>"))
+        if self._student_classroom_label:
+            self._classe_label = QLabel(f"Classe : {self._student_classroom_label}")
+            self._classe_label.setStyleSheet(f"font-size: {s(12)}px; color: {p.text_soft}; padding: 4px 8px;")
+            lieu_header_row.addStretch()
+            lieu_header_row.addWidget(self._classe_label)
+        layout.addLayout(lieu_header_row)
 
-        self._inclass_cb = QCheckBox("En classe")
-        self._inclass_cb.setChecked(True)
-        self._inclass_cb.setStyleSheet(f"font-size: {s(fs)}px; color: {p.text_strong};")
-        self._inclass_cb.toggled.connect(self._on_inclass_toggled)
-        context_layout.addWidget(self._inclass_cb)
+        lieu_btn_style = (
+            f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
+            f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
+            f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
+            f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
+            f"QPushButton:checked {{ background: {p.primary_container}; "
+            f"border: 2px solid {p.primary}; }}"
+        )
 
-        subj_lbl = QLabel("Matière :")
-        subj_lbl.setStyleSheet(f"font-size: {s(fs)}px; color: {p.text_soft};")
-        self._subject_combo = QComboBox()
-        self._subject_combo.setStyleSheet(
-            f"padding: 4px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
-            f"font-size: {s(fs)}px; background: {p.surface}; color: {p.text_strong};")
-        context_layout.addWidget(subj_lbl)
-        context_layout.addWidget(self._subject_combo, 1)
-        context_layout.addStretch()
+        self._classroom_lieu_ids = set()
+        self._lieu_group = QButtonGroup(self)
+        self._lieu_group.setExclusive(True)
+        lieu_grid = QGridLayout()
+        lieu_grid.setSpacing(8)
+        self._load_locations()
+        for idx, (lid, sid, lieu_name) in enumerate(self._locations):
+            btn = QPushButton(lieu_name)
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setMinimumHeight(64)
+            btn.setStyleSheet(lieu_btn_style)
+            if idx == 0:
+                btn.setChecked(True)
+                self._selected_lieu_id = lid
+                self._selected_lieu_label = lieu_name
+            self._lieu_group.addButton(btn, lid)
+            lieu_grid.addWidget(btn, idx // 4, idx % 4)
+            if sid == 1:
+                self._classroom_lieu_ids.add(lid)
+        self._lieu_group.buttonClicked.connect(self._on_lieu_changed)
+        layout.addLayout(lieu_grid)
 
-        # Classe info (lecture seule)
-        class_label = QLabel()
-        if self._student_classroom_id:
-            class_label.setText(f"Classe : {self._student_classroom_label}")
-            class_label.setStyleSheet(f"font-size: {s(fs)}px; color: {p.text_soft}; padding: 4px 8px;")
-        context_layout.addWidget(class_label)
+        # --- 4. Matière ---
+        layout.addSpacing(sp)
+        self._matiere_group_widget = QWidget()
+        matiere_vbox = QVBoxLayout(self._matiere_group_widget)
+        matiere_vbox.setContentsMargins(0, 0, 0, 0)
+        matiere_vbox.addWidget(QLabel("<b>Matière :</b>"))
 
-        layout.addWidget(context_frame)
-
-        # Charger les matières
+        self._subject_group = QButtonGroup(self)
+        self._subject_group.setExclusive(True)
+        self._subject_grid = QGridLayout()
+        self._subject_grid.setSpacing(8)
+        matiere_vbox.addLayout(self._subject_grid)
         self._load_subjects()
+        layout.addWidget(self._matiere_group_widget)
+        self._refresh_matiere_visibility()
 
-        # --- 4. Type d'événement hiérarchique ---
+        # --- 5. Type d'événement hiérarchique ---
         layout.addSpacing(sp)
         layout.addWidget(QLabel("<b>Type d'événement :</b>"))
+        layout.addSpacing(4)
 
-        cat_colors = {'Bureau BI': '#d32f2f', 'Médical': '#1976d2', 'Sortie': '#e65100', 'Suivi': '#f9a825'}
+        # Barre de sélection cliquable (remplace _sel_label)
+        self._sel_btn = QPushButton("")
+        self._sel_btn.setStyleSheet(
+            f"QPushButton {{ background: {p.surface_variant}; color: {p.primary}; "
+            f"font-size: {s(12)}px; font-weight: bold; padding: 6px 12px; "
+            f"border: 1px solid {p.outline_variant}; border-radius: {rd}px; text-align: left; }}"
+            f"QPushButton:hover {{ border-color: {p.primary}; }}")
+        self._sel_btn.setMinimumHeight(24)
+        self._sel_btn.setCursor(Qt.PointingHandCursor)
+        self._sel_btn.clicked.connect(self._on_sel_clicked)
+        layout.addWidget(self._sel_btn)
+
+        self._cat_colors = {'Bureau BI': '#d32f2f', 'Médical': '#1976d2',
+                            'Sortie': '#e65100', 'Suivi': '#f9a825'}
         self._cat_group = QButtonGroup(self)
-        cat_grid = QGridLayout()
+
+        # Zone de choix unique (stack)
+        self._type_stack = QStackedWidget()
+
+        # Page 0 : catégories
+        self._type_page_niv1 = QWidget()
+        cat_grid = QGridLayout(self._type_page_niv1)
         cat_grid.setSpacing(10)
         cats = list(self._type_hierarchy.keys())
         for idx, cat in enumerate(cats):
-            bg = cat_colors.get(cat, '#888')
+            bg = self._cat_colors.get(cat, '#888')
             fg = '#fff' if cat != 'Suivi' else '#222'
             btn = QPushButton(cat)
             btn.setCheckable(True)
@@ -460,44 +532,31 @@ class EventGenerator(QDialog):
             btn.toggled.connect(lambda checked, c=cat: self._on_cat_toggled(c) if checked else None)
             self._cat_group.addButton(btn)
             cat_grid.addWidget(btn, idx // 2, idx % 2)
-        layout.addLayout(cat_grid)
+        self._type_stack.addWidget(self._type_page_niv1)
 
-        self._niv2_panel = QFrame()
-        self._niv2_panel.setVisible(False)
-        self._niv2_panel.setStyleSheet(
-            f"QFrame {{ background: {p.surface_variant}; border-radius: 8px; }}")
-        niv2_vbox = QVBoxLayout(self._niv2_panel)
-        niv2_vbox.setContentsMargins(8, 4, 8, 8)
-        niv2_vbox.setSpacing(4)
-        niv2_vbox.addWidget(QLabel(
-            "<small>Sous-type</small>",
-            styleSheet=f"color: {p.text_soft}; font-size: {s(9)}px; padding-left: 2px;"))
+        # Page 1 : niveau 2
+        self._type_page_niv2 = QWidget()
+        self._niv2_layout = QVBoxLayout(self._type_page_niv2)
+        self._niv2_layout.setContentsMargins(0, 0, 0, 0)
         self._niv2_grid = QGridLayout()
         self._niv2_grid.setSpacing(8)
-        niv2_vbox.addLayout(self._niv2_grid)
-        layout.addWidget(self._niv2_panel)
+        self._niv2_layout.addLayout(self._niv2_grid)
+        self._type_stack.addWidget(self._type_page_niv2)
 
-        self._niv3_panel = QFrame()
-        self._niv3_panel.setVisible(False)
-        self._niv3_panel.setStyleSheet(
-            f"QFrame {{ background: {p.surface_variant}; border-radius: 8px; }}")
-        niv3_vbox = QVBoxLayout(self._niv3_panel)
-        niv3_vbox.setContentsMargins(8, 4, 8, 8)
-        niv3_vbox.setSpacing(4)
-        niv3_vbox.addWidget(QLabel(
-            "<small>Précision</small>",
-            styleSheet=f"color: {p.text_soft}; font-size: {s(9)}px; padding-left: 2px;"))
+        # Page 2 : niveau 3
+        self._type_page_niv3 = QWidget()
+        self._niv3_layout = QVBoxLayout(self._type_page_niv3)
+        self._niv3_layout.setContentsMargins(0, 0, 0, 0)
         self._niv3_grid = QGridLayout()
         self._niv3_grid.setSpacing(8)
-        niv3_vbox.addLayout(self._niv3_grid)
-        layout.addWidget(self._niv3_panel)
+        self._niv3_layout.addLayout(self._niv3_grid)
+        self._type_stack.addWidget(self._type_page_niv3)
 
-        self._sel_label = QLabel("")
-        self._sel_label.setStyleSheet(
-            f"color: {p.primary}; font-size: {s(11)}px; font-weight: bold; padding: 4px;")
-        layout.addWidget(self._sel_label)
+        self._type_stack.setCurrentIndex(0)
+        self._type_stack.setMinimumHeight(200)
+        layout.addWidget(self._type_stack, 1)
 
-        # --- 5. Note ---
+        # --- 6. Note ---
         layout.addSpacing(sp)
         layout.addWidget(QLabel("<b>Note :</b>"))
         self._note_input = QTextEdit()
@@ -519,8 +578,7 @@ class EventGenerator(QDialog):
         self.setLayout(layout)
 
     def _load_subjects(self):
-        self._subject_combo.clear()
-        self._subject_combo.addItem("— Sélectionner une matière —", None)
+        self._clear_grid(self._subject_grid)
         if not self._student_classroom_id:
             return
         conn = db.server_conn
@@ -528,26 +586,70 @@ class EventGenerator(QDialog):
             return
         try:
             cur = conn.cursor()
+            term_id = self._get_term_id()
             cur.execute("""
-                SELECT DISTINCT ls.id, ls.label, aec.last_name, aec.first_name
+                SELECT cts.id, cts.label, cts.fk_teacher_id,
+                       aec.last_name || ' ' || aec.first_name AS teacher_name
                 FROM larcauth_classroom_termsubject cts
-                JOIN larcauth_levelsubject ls ON ls.id = cts.fk_levelsubject_id
-                LEFT JOIN larcauth_teachadm ta ON ta.aecuser_ptr_id = cts.fk_teacher_id
-                LEFT JOIN larcauth_aecuser aec ON aec.id = ta.aecuser_ptr_id
-                WHERE cts.fk_classroom_id = %s AND cts.enabled = TRUE AND ls.enabled = TRUE
-                ORDER BY ls.label
-            """, (self._student_classroom_id,))
+                LEFT JOIN larcauth_aecuser aec ON aec.id = cts.fk_teacher_id
+                WHERE cts.fk_classroom_id = %s
+                  AND cts.enabled = TRUE
+                  AND cts.fk_term_id = %s
+                ORDER BY cts.label
+            """, (self._student_classroom_id, term_id))
             self._subjects = list(cur.fetchall())
-            for sid, label, tlast, tfirst in self._subjects:
-                display = f"{label} ({tlast} {tfirst})" if tlast else label
-                self._subject_combo.addItem(display, sid)
+            p = theme_manager.palette
+            s = theme_manager.font_size
+            subj_style = (
+                f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
+                f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
+                f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
+                f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
+                f"QPushButton:checked {{ background: {p.primary_container}; "
+                f"border: 2px solid {p.primary}; }}"
+            )
+            for idx, (sid, label, tid, tname) in enumerate(self._subjects):
+                display = label
+                btn = QPushButton(display)
+                btn.setCheckable(True)
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setMinimumHeight(60)
+                tip = tname or ""
+                btn.setToolTip(tip)
+                btn.setStyleSheet(subj_style)
+                self._subject_group.addButton(btn, sid)
+                self._subject_grid.addWidget(btn, idx // 4, idx % 4)
         except Exception as e:
             log(f"EventGenerator._load_subjects: {e}")
 
-    def _on_inclass_toggled(self, checked: bool):
-        self._subject_combo.setEnabled(checked)
-        if not checked:
-            self._subject_combo.setCurrentIndex(0)
+    def _load_locations(self):
+        self._locations = []
+        conn = db.server_conn
+        if not conn:
+            return
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT DISTINCT ON ("s_IDLieu") "IDLieu", "s_IDLieu", "Lieu"
+                FROM larcauth_lieu
+                WHERE "fk_language" = 2 AND "IDLieu" > 0
+                  AND "Lieu" NOT IN ('---', 'Non pr\u00e9cis\u00e9')
+                ORDER BY "s_IDLieu", "IDLieu"
+            """)
+            self._locations = list(cur.fetchall())
+        except Exception as e:
+            log(f"EventGenerator._load_locations: {e}")
+
+    def _on_lieu_changed(self, btn):
+        lid = self._lieu_group.id(btn)
+        self._selected_lieu_id = lid
+        self._selected_lieu_label = btn.text()
+        self._refresh_matiere_visibility()
+
+    def _refresh_matiere_visibility(self):
+        is_classroom = self._selected_lieu_id in self._classroom_lieu_ids
+        visible = self._student_classroom_label and is_classroom
+        self._matiere_group_widget.setVisible(visible)
 
     def _update_source_label(self):
         intranet_ok, _ = detect_network()
@@ -571,7 +673,7 @@ class EventGenerator(QDialog):
                        COALESCE("Event_Niveau2", '') AS niv2,
                        COALESCE("Event_Niveau3", '') AS niv3
                 FROM larcauth_type_event
-                WHERE "Enabled" = TRUE
+                WHERE "Enabled" IS NOT FALSE
                 ORDER BY idtypeevent
             ''')
             self._type_hierarchy = {}
@@ -592,16 +694,14 @@ class EventGenerator(QDialog):
         self._selected_niv2 = None
         self._selected_type_path = category
         self._populate_niv2(category)
-        self._niv3_panel.setVisible(False)
         self._update_selection()
 
     def _populate_niv2(self, category: str):
         self._clear_grid(self._niv2_grid)
         niv2s = self._type_hierarchy.get(category, {})
         if not niv2s:
-            self._niv2_panel.setVisible(False)
+            self._type_stack.setCurrentIndex(0)
             return
-        self._niv2_panel.setVisible(True)
         p = theme_manager.palette
         s = theme_manager.font_size
         ncols = 3
@@ -620,6 +720,7 @@ class EventGenerator(QDialog):
             btn.setCheckable(True)
             btn.clicked.connect(lambda checked, n=niv2, c=category: self._on_niv2_clicked(n, c))
             self._niv2_grid.addWidget(btn, idx // ncols, idx % ncols)
+        self._type_stack.setCurrentIndex(1)
 
     def _on_niv2_clicked(self, niv2: str, category: str):
         self._selected_niv2 = niv2
@@ -632,9 +733,8 @@ class EventGenerator(QDialog):
     def _populate_niv3(self, niv3s: list):
         self._clear_grid(self._niv3_grid)
         if not niv3s:
-            self._niv3_panel.setVisible(False)
+            self._type_stack.setCurrentIndex(1)
             return
-        self._niv3_panel.setVisible(True)
         p = theme_manager.palette
         s = theme_manager.font_size
         for idx, niv3 in enumerate(niv3s):
@@ -652,6 +752,7 @@ class EventGenerator(QDialog):
             btn.setCheckable(True)
             btn.clicked.connect(lambda checked, n=niv3: self._on_niv3_clicked(n))
             self._niv3_grid.addWidget(btn, 0, idx)
+        self._type_stack.setCurrentIndex(2)
 
     def _on_niv3_clicked(self, niv3: str):
         self._selected_type_path = f"{self._selected_category} > {self._selected_niv2} > {niv3}"
@@ -671,9 +772,31 @@ class EventGenerator(QDialog):
 
     def _update_selection(self):
         if self._selected_type_path:
-            self._sel_label.setText(f"✓ {self._selected_type_path}")
+            self._sel_btn.setText(f"✓ {self._selected_type_path}")
         else:
-            self._sel_label.setText("")
+            self._sel_btn.setText("")
+
+    def _on_sel_clicked(self):
+        if not self._selected_type_path:
+            return
+        parts = self._selected_type_path.split(' > ')
+        depth = len(parts)
+        if depth == 1:
+            self._type_stack.setCurrentIndex(0)
+            self._cat_group.checkedButton().setChecked(False)
+            self._selected_category = None
+            self._selected_niv2 = None
+            self._selected_type_path = ''
+            self._update_selection()
+        elif depth == 2:
+            self._selected_niv2 = None
+            self._selected_type_path = parts[0]
+            self._populate_niv2(parts[0])
+            self._type_stack.setCurrentIndex(1)
+        elif depth == 3:
+            self._populate_niv2(parts[0])
+            self._on_niv2_clicked(parts[1], parts[0])
+            self._type_stack.setCurrentIndex(2)
 
     def _validate(self):
         if not self._selected_type_path:
@@ -684,15 +807,17 @@ class EventGenerator(QDialog):
     def get_data(self) -> dict:
         dt = self._date_edit.dateTime()
         dt.setTime(self._time_edit.time())
+        subj_id = self._subject_group.checkedId()
         return {
             'student_id': self._student_id,
             'event_type': self._selected_type_path,
             'event_at': dt.toString('yyyy-MM-dd HH:mm:ss'),
             'classroom_id': self._student_classroom_id,
             'classroom_label': self._student_classroom_label,
-            'in_class': self._inclass_cb.isChecked(),
-            'subject_id': self._subject_combo.currentData() if self._inclass_cb.isChecked() else None,
-            'subject_label': self._subject_combo.currentText() if self._inclass_cb.isChecked() else '',
+            'lieu_id': self._selected_lieu_id,
+            'lieu_label': self._selected_lieu_label,
+            'subject_id': subj_id if subj_id >= 0 else None,
+            'subject_label': self._subject_group.checkedButton().text() if subj_id >= 0 else '',
             'note': self._note_input.toPlainText().strip(),
             'source': 'cloud' if not detect_network()[0] else 'intranet',
         }
@@ -927,11 +1052,47 @@ class MainWindow(QWidget):
         self._history_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self._history_table.setSelectionBehavior(QTableWidget.SelectRows)
         self._history_table.setSortingEnabled(True)
+        self._history_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._history_table.customContextMenuRequested.connect(
+            lambda pos: self._show_event_context_menu(self._history_table, pos))
+        self._history_table.cellDoubleClicked.connect(self._on_event_table_dblclick)
         self._history_layout.addWidget(history_title)
+        # -- Filtres --
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(6)
+        self._history_filter_class = QComboBox()
+        self._history_filter_class.setMinimumWidth(150)
+        self._history_filter_class.addItem("Toutes les classes", '')
+        filter_row.addWidget(QLabel("Classe:"))
+        filter_row.addWidget(self._history_filter_class)
+        self._history_filter_type = QComboBox()
+        self._history_filter_type.setMinimumWidth(180)
+        self._history_filter_type.setEditable(True)
+        self._history_filter_type.lineEdit().setPlaceholderText("Type événement...")
+        filter_row.addWidget(QLabel("Type:"))
+        filter_row.addWidget(self._history_filter_type)
+        filter_row.addSpacing(10)
+        self._history_filter_date_from = QDateEdit()
+        self._history_filter_date_from.setCalendarPopup(True)
+        self._history_filter_date_from.setDate(QDate.currentDate().addMonths(-1))
+        filter_row.addWidget(QLabel("Du:"))
+        filter_row.addWidget(self._history_filter_date_from)
+        self._history_filter_date_to = QDateEdit()
+        self._history_filter_date_to.setCalendarPopup(True)
+        self._history_filter_date_to.setDate(QDate.currentDate())
+        filter_row.addWidget(QLabel("Au:"))
+        filter_row.addWidget(self._history_filter_date_to)
+        filter_btn = QPushButton("Filtrer")
+        filter_btn.setCursor(Qt.PointingHandCursor)
+        filter_btn.clicked.connect(lambda: self._load_global_history(self._current_group_mode))
+        filter_row.addWidget(filter_btn)
+        filter_row.addStretch()
+        self._history_layout.addLayout(filter_row)
         self._history_layout.addWidget(self._history_table)
-        group_layout.addWidget(self._history_group)
+        self._history_group.setMinimumHeight(320)
+        group_layout.addWidget(self._history_group, 1)
 
-        # -- Ligne 2 bar charts côte à côte --
+        # -- Ligne 3 graphiques : abs | sorties | tendance --
         bar_row = QHBoxLayout()
         bar_row.setSpacing(8)
         self._abs_bar_view = QChartView()
@@ -949,16 +1110,16 @@ class MainWindow(QWidget):
         self._exit_bar = QChart()
         self._exit_bar_view.setChart(self._exit_bar)
         bar_row.addWidget(self._exit_bar_view)
-        group_layout.addLayout(bar_row)
 
-        # -- Ligne courbe tendance (pleine largeur) --
         self._trend_view = QChartView()
         self._trend_view.setRenderHint(QPainter.Antialiasing)
-        self._trend_view.setMinimumHeight(200)
+        self._trend_view.setMinimumHeight(220)
         self._trend_view.setObjectName("panel")
         self._trend_chart = QChart()
+        self._trend_chart.setAnimationOptions(QChart.SeriesAnimations)
         self._trend_view.setChart(self._trend_chart)
-        group_layout.addWidget(self._trend_view)
+        bar_row.addWidget(self._trend_view, 1)
+        group_layout.addLayout(bar_row)
 
         # -- Ligne donut + stats table --
         mid_row = QHBoxLayout()
@@ -1109,7 +1270,7 @@ class MainWindow(QWidget):
             ('date_entree', "Date d'entrée"),
         ]:
             w = QLabel()
-            w.setStyleSheet(f"font-size: {s(10)}px; color: {p.text_soft};")
+            w.setStyleSheet(f"font-size: {s(12)}px; color: {p.text_soft};")
             w.setWordWrap(True)
             self._sd_contact_labels[key] = w
             info_col.addWidget(w)
@@ -1157,7 +1318,11 @@ class MainWindow(QWidget):
         self._sd_events.horizontalHeader().setStretchLastSection(True)
         self._sd_events.setEditTriggers(QTableWidget.NoEditTriggers)
         self._sd_events.setSelectionBehavior(QTableWidget.SelectRows)
-        self._sd_events.setMaximumHeight(160)
+        self._sd_events.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._sd_events.customContextMenuRequested.connect(
+            lambda pos: self._show_event_context_menu(self._sd_events, pos))
+        self._sd_events.cellDoubleClicked.connect(self._on_event_table_dblclick)
+        self._sd_events.setMaximumHeight(240)
         t1_layout.addWidget(evt_label)
         t1_layout.addWidget(self._sd_events)
 
@@ -1679,10 +1844,25 @@ class MainWindow(QWidget):
         if not conn or not self._current_term_id:
             return
 
-        date_from, date_to = self._period_dates()
-
         try:
             cur = conn.cursor()
+
+            # Populate filter combos
+            if self._history_filter_class.count() <= 1:
+                cur.execute("""
+                    SELECT c.id, c.label FROM larcauth_classroom c
+                    JOIN larcauth_level l ON l.id = c.fk_level_id
+                    JOIN larcauth_program p ON p.id = l.fk_program_id
+                    WHERE c.enabled = TRUE
+                    ORDER BY c.label
+                """)
+                for cid, clabel in cur.fetchall():
+                    self._history_filter_class.addItem(clabel, cid)
+                self._history_filter_class.model().sort(0)
+            if self._history_filter_type.count() == 0:
+                cur.execute("SELECT DISTINCT event_type FROM student_event ORDER BY event_type")
+                for (et,) in cur.fetchall():
+                    self._history_filter_type.addItem(et)
 
             if mode == 'grp_all':
                 class_filter = "AND p.sigle IN ('PEI', 'MYP', 'DPEn', 'DPFr')"
@@ -1694,12 +1874,27 @@ class MainWindow(QWidget):
                 sigle = mode.split('_')[1]
                 class_filter = f"AND p.sigle ILIKE '{sigle}'"
 
+            # -- Filtres suppl. --
+            params = []
+            sel_class = self._history_filter_class.currentData()
+            sel_type = self._history_filter_type.currentText().strip()
+            date_from = self._history_filter_date_from.date().toString('yyyy-MM-dd')
+            date_to = self._history_filter_date_to.date().toString('yyyy-MM-dd')
+
+            if sel_class:
+                class_filter += " AND c.id = %s"
+                params.append(sel_class)
+            if sel_type:
+                class_filter += " AND se.event_type ILIKE %s"
+                params.append(f'%{sel_type}%')
+
             cur.execute(f"""
                 SELECT se.event_id,
                        aec.last_name || ' ' || aec.first_name AS student_name,
                        c.label AS class_name,
-                       se.event_type, se.event_at, se.note,
-                       u.last_name || ' ' || u.first_name AS created_by_name
+                       se.event_type, se.event_at, se.lieu_label, se.subject_label, se.note,
+                       u.last_name || ' ' || u.first_name AS created_by_name,
+                       se.validated_by
                 FROM student_event se
                 JOIN larcauth_student s ON s.aecuser_ptr_id = se.student_id
                 JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id
@@ -1710,17 +1905,17 @@ class MainWindow(QWidget):
                 WHERE DATE(se.event_at) BETWEEN %s AND %s {class_filter}
                 ORDER BY se.event_at DESC
                 LIMIT 500
-            """, (date_from, date_to))
+            """, (date_from, date_to, *params))
 
             rows = cur.fetchall()
             self._history_table.setRowCount(len(rows))
-            self._history_table.setColumnCount(7)
+            self._history_table.setColumnCount(10)
             self._history_table.setHorizontalHeaderLabels(
-                ["ID", "Élève", "Classe", "Type", "Heure", "Note", "Créé par"])
+                ["ID", "Élève", "Classe", "Type", "Lieu", "Matière", "Heure", "Note", "Créé par", "Validé"])
             self._history_table.setColumnHidden(0, True)  # event_id
 
             for i, row in enumerate(rows):
-                eid, name, cls_name, etype, e_at, note, creator = row
+                eid, name, cls_name, etype, e_at, lieu, subject, note, creator, validated = row
                 ei = _event_icon(etype)
                 color = _event_color(etype)
                 display_type = f"{ei} {etype}"
@@ -1730,23 +1925,32 @@ class MainWindow(QWidget):
                     QTableWidgetItem(name),
                     QTableWidgetItem(cls_name),
                     QTableWidgetItem(display_type),
+                    QTableWidgetItem(lieu or ''),
+                    QTableWidgetItem(subject or ''),
                     QTableWidgetItem(e_at.strftime('%H:%M') if e_at else ''),
                     QTableWidgetItem(note or ''),
                     QTableWidgetItem(creator),
+                    QTableWidgetItem("✓" if validated else ''),
                 ]
                 for j in range(len(items)):
                     if j == 3:
                         items[j].setForeground(QBrush(QColor(color)))
+                    if j == 9 and validated:
+                        items[j].setForeground(QBrush(QColor('#2e7d32')))
+                        items[j].setFont(QFont('Segoe UI', 10, QFont.Bold))
                     items[j].setFlags(items[j].flags() & ~Qt.ItemIsEditable)
                     self._history_table.setItem(i, j, items[j])
             hh = self._history_table.horizontalHeader()
-            hh.setSectionResizeMode(0, QHeaderView.Fixed); self._history_table.setColumnWidth(0, 0)
+            hh.setSectionResizeMode(0, QHeaderView.Fixed);     self._history_table.setColumnWidth(0, 0)
             hh.setSectionResizeMode(1, QHeaderView.Interactive); self._history_table.setColumnWidth(1, 140)
             hh.setSectionResizeMode(2, QHeaderView.Interactive); self._history_table.setColumnWidth(2, 80)
-            hh.setSectionResizeMode(3, QHeaderView.Interactive); self._history_table.setColumnWidth(3, 110)
-            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._history_table.setColumnWidth(4, 60)
-            hh.setSectionResizeMode(5, QHeaderView.Stretch)
-            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._history_table.setColumnWidth(6, 120)
+            hh.setSectionResizeMode(3, QHeaderView.Interactive); self._history_table.setColumnWidth(3, 180)
+            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._history_table.setColumnWidth(4, 120)
+            hh.setSectionResizeMode(5, QHeaderView.Interactive); self._history_table.setColumnWidth(5, 100)
+            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._history_table.setColumnWidth(6, 60)
+            hh.setSectionResizeMode(7, QHeaderView.Interactive); self._history_table.setColumnWidth(7, 150)
+            hh.setSectionResizeMode(8, QHeaderView.Interactive); self._history_table.setColumnWidth(8, 120)
+            hh.setSectionResizeMode(9, QHeaderView.Interactive); self._history_table.setColumnWidth(9, 60)
 
         except Exception as e:
             log(f"_load_global_history: {e}")
@@ -1873,9 +2077,10 @@ class MainWindow(QWidget):
             try:
                 cur = conn.cursor()
                 cur.execute(
-                    "INSERT INTO student_event (student_id, event_type, event_at, note, source, created_by) "
-                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    "INSERT INTO student_event (student_id, event_type, event_at, lieu_label, subject_label, note, source, created_by) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                     (data['student_id'], data['event_type'], data['event_at'],
+                     data['lieu_label'], data.get('subject_label', ''),
                      data['note'], data['source'], session.user_id)
                 )
                 conn.commit()
@@ -1931,12 +2136,10 @@ class MainWindow(QWidget):
                 f"<b>Date d'entrée :</b> {date_entree.strftime('%d/%m/%Y') if date_entree else '—'}")
 
             # Photo
-            photo_file = f"photos/{student_id}.png"
-            if os.path.isfile(photo_file):
-                pix = QPixmap(photo_file)
-                if not pix.isNull():
-                    self._sd_photo.setPixmap(
-                        pix.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            pix = QPixmap(get_photo_path(student_id))
+            if not pix.isNull():
+                self._sd_photo.setPixmap(
+                    pix.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             if not self._sd_photo.pixmap() or self._sd_photo.pixmap().isNull():
                 self._sd_photo.setText("📷")
 
@@ -1999,8 +2202,9 @@ class MainWindow(QWidget):
 
             # -- Derniers événements --
             cur.execute("""
-                SELECT se.event_id, se.event_type, se.event_at, se.note,
-                       u.last_name || ' ' || u.first_name AS creator
+                SELECT se.event_id, se.event_type, se.event_at, se.lieu_label, se.subject_label, se.note,
+                       u.last_name || ' ' || u.first_name AS creator,
+                       se.validated_by
                 FROM student_event se
                 LEFT JOIN larcauth_aecuser u ON u.id = se.created_by
                 WHERE se.student_id = %s
@@ -2009,27 +2213,33 @@ class MainWindow(QWidget):
             """, (student_id,))
             evts = cur.fetchall()
             self._sd_events.setRowCount(len(evts))
-            self._sd_events.setColumnCount(4)
-            self._sd_events.setHorizontalHeaderLabels(["Type", "Date", "Note", "Créé par"])
-            for i, (eid, etype, e_at, note, creator) in enumerate(evts):
+            self._sd_events.setColumnCount(8)
+            self._sd_events.setHorizontalHeaderLabels(["ID", "Type", "Lieu", "Matière", "Date", "Note", "Créé par", "Validé"])
+            self._sd_events.setColumnHidden(0, True)
+            for i, (eid, etype, e_at, lieu, subject, note, creator, validated) in enumerate(evts):
                 items = [
+                    QTableWidgetItem(str(eid)),
                     QTableWidgetItem(etype),
+                    QTableWidgetItem(lieu or ''),
+                    QTableWidgetItem(subject or ''),
                     QTableWidgetItem(e_at.strftime('%d/%m %H:%M') if e_at else ''),
                     QTableWidgetItem(note or ''),
                     QTableWidgetItem(creator),
+                    QTableWidgetItem("✓" if validated else ''),
                 ]
                 for it in items:
                     it.setFlags(it.flags() & ~Qt.ItemIsEditable)
                 for j, it in enumerate(items):
                     self._sd_events.setItem(i, j, it)
             hh = self._sd_events.horizontalHeader()
-            hh.setSectionResizeMode(0, QHeaderView.Interactive)
-            hh.setSectionResizeMode(1, QHeaderView.Interactive)
-            hh.setSectionResizeMode(2, QHeaderView.Stretch)
-            hh.setSectionResizeMode(3, QHeaderView.Interactive)
-            self._sd_events.setColumnWidth(0, 90)
-            self._sd_events.setColumnWidth(1, 100)
-            self._sd_events.setColumnWidth(3, 120)
+            hh.setSectionResizeMode(0, QHeaderView.Fixed);     self._sd_events.setColumnWidth(0, 0)
+            hh.setSectionResizeMode(1, QHeaderView.Interactive); self._sd_events.setColumnWidth(1, 180)
+            hh.setSectionResizeMode(2, QHeaderView.Interactive); self._sd_events.setColumnWidth(2, 120)
+            hh.setSectionResizeMode(3, QHeaderView.Interactive); self._sd_events.setColumnWidth(3, 100)
+            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._sd_events.setColumnWidth(4, 120)
+            hh.setSectionResizeMode(5, QHeaderView.Interactive); self._sd_events.setColumnWidth(5, 150)
+            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._sd_events.setColumnWidth(6, 120)
+            hh.setSectionResizeMode(7, QHeaderView.Interactive); self._sd_events.setColumnWidth(7, 60)
 
             # Afficher les tabs, cacher le placeholder
             self._sd_tabs.show()
@@ -2058,6 +2268,155 @@ class MainWindow(QWidget):
             # Trimestre = 3 mois glissants
             start = today.addMonths(-3)
             return start.toString('yyyy-MM-dd'), today.toString('yyyy-MM-dd')
+
+    def _get_event_id_from_table(self, table: QTableWidget) -> int | None:
+        idx = table.currentRow()
+        if idx < 0:
+            return None
+        item = table.item(idx, 0)
+        return int(item.text()) if item and item.text().isdigit() else None
+
+    def _show_event_context_menu(self, table: QTableWidget, pos):
+        eid = self._get_event_id_from_table(table)
+        if not eid:
+            return
+        conn = db.server_conn
+        is_validated = False
+        if conn:
+            cur = conn.cursor()
+            cur.execute("SELECT validated_by FROM student_event WHERE event_id = %s", (eid,))
+            row = cur.fetchone()
+            is_validated = row and row[0] is not None
+        menu = QMenu(self)
+        edit_action = menu.addAction("✏️ Modifier")
+        validate_action = menu.addAction("🔒 Dévalider" if is_validated else "✅ Valider")
+        delete_action = menu.addAction("🗑️ Supprimer")
+        chosen = menu.exec(table.viewport().mapToGlobal(pos))
+        if chosen == edit_action:
+            self._edit_event(eid)
+        elif chosen == validate_action:
+            self._toggle_validation(eid)
+        elif chosen == delete_action:
+            self._delete_event(eid)
+
+    def _on_event_table_dblclick(self, row: int, col: int):
+        sender = self.sender()
+        if not isinstance(sender, QTableWidget):
+            return
+        item = sender.item(row, 0)
+        eid = int(item.text()) if item and item.text().isdigit() else None
+        if eid:
+            self._edit_event(eid)
+
+    def _edit_event(self, event_id: int):
+        conn = db.server_conn
+        if not conn:
+            QMessageBox.warning(self, "Erreur", "Aucune connexion base de données.")
+            return
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT se.event_type, se.event_at, se.lieu_label, se.subject_label, se.note,
+                   aec.last_name || ' ' || aec.first_name AS student_name
+            FROM student_event se
+            JOIN larcauth_aecuser aec ON aec.id = se.student_id
+            WHERE se.event_id = %s
+        """, (event_id,))
+        row = cur.fetchone()
+        if not row:
+            QMessageBox.warning(self, "Erreur", "Événement introuvable.")
+            return
+        etype, e_at, lieu, subject, note, student_name = row
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Modifier l'événement #{event_id}")
+        dlg.setMinimumSize(480, 400)
+        layout = QVBoxLayout(dlg)
+        p = theme_manager.palette
+
+        # Infos
+        info = QLabel(
+            f"<b>{student_name}</b> — {etype}<br>"
+            f"<span style='color:{p.text_weak};font-size:{theme_manager.font_size(10)}px;'>"
+            f"{e_at.strftime('%d/%m/%Y %H:%M') if e_at else ''} | {lieu or ''}"
+            f"{' | ' + subject if subject else ''}</span>")
+        info.setWordWrap(True)
+        info.setTextFormat(Qt.RichText)
+        layout.addWidget(info)
+
+        # Type
+        layout.addWidget(QLabel("Type d'événement:"))
+        type_input = QComboBox()
+        cur2 = conn.cursor()
+        cur2.execute("SELECT DISTINCT event_type FROM student_event ORDER BY event_type")
+        type_input.addItems([et for (et,) in cur2.fetchall()])
+        type_input.setCurrentText(etype)
+        layout.addWidget(type_input)
+
+        # Note
+        layout.addWidget(QLabel("Note:"))
+        note_input = QTextEdit()
+        note_input.setText(note or '')
+        note_input.setMaximumHeight(120)
+        layout.addWidget(note_input)
+
+        # Boutons
+        btn_row = QHBoxLayout()
+        save_btn = QPushButton("Enregistrer")
+        save_btn.setStyleSheet(
+            f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
+            f"border: none; border-radius: 6px; padding: 8px 20px; font-weight: bold; }}")
+        save_btn.clicked.connect(lambda: (
+            cur.execute("UPDATE student_event SET event_type = %s, note = %s WHERE event_id = %s",
+                        (type_input.currentText(), note_input.toPlainText().strip(), event_id)),
+            conn.commit(), dlg.accept()))
+        cancel_btn = QPushButton("Annuler")
+        cancel_btn.clicked.connect(dlg.reject)
+        btn_row.addStretch()
+        btn_row.addWidget(save_btn)
+        btn_row.addWidget(cancel_btn)
+        layout.addLayout(btn_row)
+
+        if dlg.exec() == QDialog.Accepted:
+            self.refresh_all()
+
+    def _toggle_validation(self, event_id: int):
+        conn = db.server_conn
+        if not conn:
+            return
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT validated_by FROM student_event WHERE event_id = %s", (event_id,))
+            row = cur.fetchone()
+            if row and row[0] is not None:
+                cur.execute("UPDATE student_event SET validated_by = NULL WHERE event_id = %s", (event_id,))
+            else:
+                cur.execute("UPDATE student_event SET validated_by = %s WHERE event_id = %s",
+                            (session.user_id, event_id))
+            conn.commit()
+            self.refresh_all()
+        except Exception as e:
+            log(f"_toggle_validation: {e}")
+            conn.rollback()
+
+    def _delete_event(self, event_id: int):
+        reply = QMessageBox.question(
+            self, "Confirmer la suppression",
+            f"Supprimer définitivement l'événement #{event_id} ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply != QMessageBox.Yes:
+            return
+        conn = db.server_conn
+        if not conn:
+            return
+        try:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM student_event WHERE event_id = %s", (event_id,))
+            conn.commit()
+            self.refresh_all()
+        except Exception as e:
+            log(f"_delete_event: {e}")
+            conn.rollback()
+            QMessageBox.critical(self, "Erreur", f"Échec de la suppression : {e}")
 
     def refresh_all(self):
         self._update_network_label()

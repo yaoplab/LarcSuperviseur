@@ -27,3 +27,8 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Source photos (processed 500×500 PNGs in photos/ root are tracked)
+photos/FB/
+photos/Fond-Blanc/
+photos/Gaits/
