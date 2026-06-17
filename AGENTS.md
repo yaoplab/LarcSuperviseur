@@ -69,9 +69,42 @@ SUPERVISEUR (write), COORD (write + validate), ADMIN (full). Checked via `type_s
 - Refresh timer: 30 seconds in MainWindow
 - Theme switch rebuilds the entire stylesheet (not just palette swap)
 
+## LoginWindow design (17 juin 2026)
+
+- Window 420×679px (ratio φ ≈1.618)
+- All pixel values from Fibonacci {8, 13, 21, 34, 55, 89, 144, 233}
+- Margins 34px left/right, 21px top/bottom
+- MD3 spacings: form rows 16px, sections 24px, after button 16px
+- Logo 89px, fields 55px, button 210×55px, font 13px
+- Labels above fields (VBoxLayout, not QFormLayout side-by-side)
+- Button centered (both onglets)
+- Onglet Intranet hidden when Intranet unreachable; double-clic logo → checkbox "Choisir connexion" → both visible
+- `_tab_intranet()` uses VBoxLayout; `_tab_cloud()` uses QVBoxLayout
+
+## PhotoPreloader (common/photos.py)
+
+- `PhotoPreloader(QThread)` background precharge of student photos
+- `ensure_cached()` copie locale uniquement (pas de download Supabase en precharge)
+- `get_uncached_ids()` scanne `photos/` et `photos/cache/` (pas de requête DB)
+- Cache prioritaire : `photos/cache/` avant `photos/`
+- Timeout Supabase 5s dans `get_photo_path()`
+
+## Supabase / Cloud
+
+- `database.py`: `sslmode='require'` ajouté à `connect_cloud()` (obligatoire Supabase)
+- OAuth2 Google port 8765, `@arc-en-ciel.org` only
+- `session.py`: AuthResult avec `term_id`/`term_label`
+
+## DB restoration
+
+- DB locale perdue le 17 juin — backup 3 semaines à restaurer
+- Après restauration : executer `python -m LarcSuperviseur.sql.run_ddl` (student_event table + vues)
+- Table `larcauth_type_event` : 27 lignes (IDs 100-499, 4 categories). Fichier `sql/01_add_type_event.sql` perdu — à re-générer depuis les données Supabase ou re-créer manuellement
+
 ## Gotchas
 
 - `main_window.py` is a single ~2650-line file containing MainWindow and EventGenerator — read it in sections
 - `_event_icon()` and `_event_color()` must handle both old keywords and new hierarchical paths
 - The app expects to be run on a machine with network access to the PostgreSQL server at `192.168.2.90` (or configured host)
 - `sql/run_ddl.py` has hardcoded path `C:\Projets\eLarcProfPy` — adjust if running elsewhere
+- Push GitHub : remote URL a un token expiré (`ghp_yaoplab`). Mettre à jour avec `git remote set-url origin https://yaoplab:NOUVEAU_TOKEN@github.com/yaoplab/LarcSuperviseur.git`
