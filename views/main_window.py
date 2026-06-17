@@ -80,12 +80,12 @@ class StudentCard(QFrame):
             f"}}"
         )
         self.setStyleSheet(self._default_style)
-        self.setFixedSize(160, 200)
+        self.setFixedSize(124, 200)
         self.setCursor(Qt.PointingHandCursor)
 
         layout = QVBoxLayout()
-        layout.setSpacing(4)
-        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(8)
+        layout.setContentsMargins(8, 8, 8, 8)
 
         # Nom (en haut)
         self._name_label = QLabel()
@@ -93,29 +93,29 @@ class StudentCard(QFrame):
         self._name_label.setAlignment(Qt.AlignCenter)
         self._name_label.setText(
             f"<b style='font-size:{theme_manager.font_size(13)}px'>{last_name}</b><br>"
-            f"<span style='font-size:{theme_manager.font_size(12)}px; color:{theme_manager.palette.text_soft}'>{first_name}</span>"
+            f"<span style='font-size:{theme_manager.font_size(13)}px; color:{theme_manager.palette.text_soft}'>{first_name}</span>"
         )
 
         # Badge photo (conteneur coloré)
         self._photo_badge = QFrame()
-        self._photo_badge.setFixedSize(110, 110)
+        self._photo_badge.setFixedSize(89, 89)
         self._photo_badge.setStyleSheet(
             f"background: {theme_manager.palette.primary_container};"
-            f"border-radius: 12px;"
+            f"border-radius: 8px;"
         )
         badge_layout = QVBoxLayout(self._photo_badge)
         badge_layout.setAlignment(Qt.AlignCenter)
         badge_layout.setContentsMargins(0, 0, 0, 0)
 
         self._photo = QLabel()
-        self._photo.setFixedSize(100, 100)
+        self._photo.setFixedSize(89, 89)
         self._photo.setAlignment(Qt.AlignCenter)
 
         pix = QPixmap(get_photo_path(student_id))
         if pix.isNull() or pix.size().isNull():
             pix = self._make_avatar(last_name, first_name)
         else:
-            pix = pix.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            pix = pix.scaled(89, 89, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self._photo.setPixmap(pix)
 
         badge_layout.addWidget(self._photo)
@@ -123,36 +123,35 @@ class StudentCard(QFrame):
         # Statut
         self._status_label = QLabel()
         self._status_label.setAlignment(Qt.AlignCenter)
-        self._status_label.setStyleSheet(f"font-size: {theme_manager.font_size(12)}px; font-weight: bold;")
+        self._status_label.setStyleSheet(f"font-size: {theme_manager.font_size(13)}px; font-weight: bold;")
 
         # Nb sorties
         self._exit_label = QLabel()
         self._exit_label.setAlignment(Qt.AlignCenter)
-        self._exit_label.setStyleSheet(f"font-size: {theme_manager.font_size(11)}px; color: {theme_manager.palette.text_disabled};")
+        self._exit_label.setStyleSheet(f"font-size: {theme_manager.font_size(8)}px; color: {theme_manager.palette.text_disabled};")
 
         layout.addWidget(self._name_label)
         layout.addStretch()
         layout.addWidget(self._photo_badge, 0, Qt.AlignCenter)
-        layout.addSpacing(10)
+        layout.addSpacing(8)
         layout.addWidget(self._status_label)
         layout.addWidget(self._exit_label)
-        layout.addSpacing(2)
         self.setLayout(layout)
 
     def _make_avatar(self, last_name: str, first_name: str) -> QPixmap:
         initials = (last_name[:1] + first_name[:1]).upper() or '?'
         colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c']
         c = colors[hash(last_name + first_name) % len(colors)]
-        px = QPixmap(100, 100)
+        px = QPixmap(89, 89)
         px.fill(Qt.transparent)
         p = QPainter(px)
         p.setRenderHint(QPainter.Antialiasing)
         p.setBrush(QColor(c))
         p.setPen(Qt.NoPen)
-        p.drawEllipse(0, 0, 100, 100)
+        p.drawEllipse(0, 0, 89, 89)
         p.setPen(QColor('#fff'))
         font = p.font()
-        font.setPixelSize(36)
+        font.setPixelSize(34)
         font.setBold(True)
         p.setFont(font)
         p.drawText(px.rect(), Qt.AlignCenter, initials)
@@ -166,7 +165,7 @@ class StudentCard(QFrame):
     def set_status(self, text: str, color: str):
         self._status_label.setText(text)
         self._status_label.setStyleSheet(
-            f"font-size: {theme_manager.font_size(10)}px; font-weight: bold; color: {color};")
+            f"font-size: {theme_manager.font_size(13)}px; font-weight: bold; color: {color};")
 
     def set_exit_count(self, count: int):
         self._exit_label.setText(f"{count} sortie(s)" if count else '')
@@ -585,15 +584,28 @@ class EventGenerator(QDialog):
             return
         try:
             cur = conn.cursor()
-            cur.execute("""
-                SELECT cts.id, cts.label, cts.fk_teacher_id,
-                       aec.last_name || ' ' || aec.first_name AS teacher_name
-                FROM larcauth_classroom_termsubject cts
-                LEFT JOIN larcauth_aecuser aec ON aec.id = cts.fk_teacher_id
-                WHERE cts.fk_classroom_id = %s
-                  AND cts.enabled = TRUE
-                ORDER BY cts.label
-            """, (self._student_classroom_id,))
+            term_id = self._get_term_id()
+            try:
+                cur.execute("""
+                    SELECT cts.id, cts.label, cts.fk_teacher_id,
+                           aec.last_name || ' ' || aec.first_name AS teacher_name
+                    FROM larcauth_classroom_termsubject cts
+                    LEFT JOIN larcauth_aecuser aec ON aec.id = cts.fk_teacher_id
+                    WHERE cts.fk_classroom_id = %s
+                      AND cts.fk_term_id = %s
+                      AND cts.enabled = TRUE
+                    ORDER BY cts.label
+                """, (self._student_classroom_id, term_id))
+            except Exception:
+                cur.execute("""
+                    SELECT cts.id, cts.label, cts.fk_teacher_id,
+                           aec.last_name || ' ' || aec.first_name AS teacher_name
+                    FROM larcauth_classroom_termsubject cts
+                    LEFT JOIN larcauth_aecuser aec ON aec.id = cts.fk_teacher_id
+                    WHERE cts.fk_classroom_id = %s
+                      AND cts.enabled = TRUE
+                    ORDER BY cts.label
+                """, (self._student_classroom_id,))
             self._subjects = list(cur.fetchall())
             p = theme_manager.palette
             s = theme_manager.font_size
@@ -1169,7 +1181,7 @@ class MainWindow(QWidget):
         # -- Page 0 : Cartes élèves --
         self._cards_widget = QWidget()
         self._cards_layout = QGridLayout(self._cards_widget)
-        self._cards_layout.setSpacing(6)
+        self._cards_layout.setSpacing(8)
         self._cards_scroll = QScrollArea()
         self._cards_scroll.setWidget(self._cards_widget)
         self._cards_scroll.setWidgetResizable(True)
@@ -1701,8 +1713,14 @@ class MainWindow(QWidget):
                 for item in items:
                     item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 for j, item in enumerate(items):
+                    item.setTextAlignment(Qt.AlignCenter)
                     self._stats_table.setItem(i, j, item)
-            self._stats_table.resizeColumnsToContents()
+            hh = self._stats_table.horizontalHeader()
+            total_w = self._stats_table.viewport().width()
+            col_w = max(80, total_w // 5)
+            for c in range(5):
+                hh.setSectionResizeMode(c, QHeaderView.Fixed)
+                self._stats_table.setColumnWidth(c, col_w)
 
             # --- Barres absences par classe ---
             self._abs_bar.removeAllSeries()
@@ -1958,19 +1976,21 @@ class MainWindow(QWidget):
                     if j == 9 and validated:
                         items[j].setForeground(QBrush(QColor('#2e7d32')))
                         items[j].setFont(QFont('Segoe UI', 10, QFont.Bold))
+                    if j not in (3, 7):
+                        items[j].setTextAlignment(Qt.AlignCenter)
                     items[j].setFlags(items[j].flags() & ~Qt.ItemIsEditable)
                     self._history_table.setItem(i, j, items[j])
             hh = self._history_table.horizontalHeader()
-            hh.setSectionResizeMode(0, QHeaderView.Fixed);     self._history_table.setColumnWidth(0, 0)
+            hh.setSectionResizeMode(0, QHeaderView.Fixed);       self._history_table.setColumnWidth(0, 0)
             hh.setSectionResizeMode(1, QHeaderView.Interactive); self._history_table.setColumnWidth(1, 140)
-            hh.setSectionResizeMode(2, QHeaderView.Interactive); self._history_table.setColumnWidth(2, 80)
-            hh.setSectionResizeMode(3, QHeaderView.Interactive); self._history_table.setColumnWidth(3, 140)
-            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._history_table.setColumnWidth(4, 110)
+            hh.setSectionResizeMode(2, QHeaderView.Interactive); self._history_table.setColumnWidth(2, 100)
+            hh.setSectionResizeMode(3, QHeaderView.Interactive); self._history_table.setColumnWidth(3, 300)
+            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._history_table.setColumnWidth(4, 120)
             hh.setSectionResizeMode(5, QHeaderView.Interactive); self._history_table.setColumnWidth(5, 110)
-            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._history_table.setColumnWidth(6, 70)
+            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._history_table.setColumnWidth(6, 100)
             hh.setSectionResizeMode(7, QHeaderView.Stretch)
-            hh.setSectionResizeMode(8, QHeaderView.Interactive); self._history_table.setColumnWidth(8, 130)
-            hh.setSectionResizeMode(9, QHeaderView.Interactive); self._history_table.setColumnWidth(9, 55)
+            hh.setSectionResizeMode(8, QHeaderView.Interactive); self._history_table.setColumnWidth(8, 200)
+            hh.setSectionResizeMode(9, QHeaderView.Interactive); self._history_table.setColumnWidth(9, 130)
 
         except Exception as e:
             log(f"_load_global_history: {e}")
@@ -2036,9 +2056,9 @@ class MainWindow(QWidget):
 
             # Remplir les cartes avec colonnes adaptatives
             avail_w = self._cards_scroll.viewport().width()
-            card_w = 160
-            spacing = 6
-            cols = max(1, min(8, (avail_w + spacing) // (card_w + spacing))) if avail_w > 100 else 3
+            card_w = 124
+            spacing = 8
+            cols = max(1, (avail_w + spacing) // (card_w + spacing)) if avail_w > 100 else 3
             for idx, s in enumerate(self._students):
                 sid = s['id']
                 card = StudentCard(sid, s['last_name'], s['first_name'])
@@ -2049,15 +2069,15 @@ class MainWindow(QWidget):
                 card.set_status(stats['presence'], color)
                 card.set_absent(is_absent)
                 card.clicked.connect(self._on_student_selected)
-                self._cards_layout.addWidget(card, idx // cols, idx % cols)
+                self._cards_layout.addWidget(card, idx // cols, idx % cols, Qt.AlignCenter)
 
             # Étendre la grille
             remaining = len(self._students) % cols
             if remaining:
                 for _ in range(cols - remaining):
                     spacer = QWidget()
-                    spacer.setFixedSize(160, 200)
-                    self._cards_layout.addWidget(spacer, len(self._students) // cols, cols - remaining + _)
+                    spacer.setFixedSize(124, 200)
+                    self._cards_layout.addWidget(spacer, len(self._students) // cols, cols - remaining + _, Qt.AlignCenter)
 
         except Exception as e:
             log(f"_load_students: {e}")
@@ -2250,19 +2270,20 @@ class MainWindow(QWidget):
                     QTableWidgetItem("✓" if validated else ''),
                 ]
                 items[1].setForeground(QBrush(QColor(color)))
-                for it in items:
-                    it.setFlags(it.flags() & ~Qt.ItemIsEditable)
                 for j, it in enumerate(items):
+                    if j not in (1, 5):
+                        it.setTextAlignment(Qt.AlignCenter)
+                    it.setFlags(it.flags() & ~Qt.ItemIsEditable)
                     self._sd_events.setItem(i, j, it)
             hh = self._sd_events.horizontalHeader()
             hh.setSectionResizeMode(0, QHeaderView.Fixed);     self._sd_events.setColumnWidth(0, 0)
-            hh.setSectionResizeMode(1, QHeaderView.Interactive); self._sd_events.setColumnWidth(1, 120)
-            hh.setSectionResizeMode(2, QHeaderView.Interactive); self._sd_events.setColumnWidth(2, 110)
+            hh.setSectionResizeMode(1, QHeaderView.Interactive); self._sd_events.setColumnWidth(1, 300)
+            hh.setSectionResizeMode(2, QHeaderView.Interactive); self._sd_events.setColumnWidth(2, 120)
             hh.setSectionResizeMode(3, QHeaderView.Interactive); self._sd_events.setColumnWidth(3, 110)
-            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._sd_events.setColumnWidth(4, 130)
+            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._sd_events.setColumnWidth(4, 100)
             hh.setSectionResizeMode(5, QHeaderView.Stretch)
-            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._sd_events.setColumnWidth(6, 130)
-            hh.setSectionResizeMode(7, QHeaderView.Interactive); self._sd_events.setColumnWidth(7, 55)
+            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._sd_events.setColumnWidth(6, 200)
+            hh.setSectionResizeMode(7, QHeaderView.Interactive); self._sd_events.setColumnWidth(7, 200)
 
             # Afficher les tabs, cacher le placeholder
             self._sd_tabs.show()
@@ -2460,9 +2481,9 @@ class MainWindow(QWidget):
 
     def _reflow_cards(self):
         avail_w = self._cards_scroll.viewport().width()
-        card_w = 160
-        spacing = 6
-        cols = max(1, min(8, (avail_w + spacing) // (card_w + spacing))) if avail_w > 100 else 3
+        card_w = 124
+        spacing = 8
+        cols = max(1, (avail_w + spacing) // (card_w + spacing)) if avail_w > 100 else 3
         # Garder les StudentCard, jeter les spacers
         cards = []
         for i in reversed(range(self._cards_layout.count())):
@@ -2474,13 +2495,13 @@ class MainWindow(QWidget):
                 else:
                     w.deleteLater()
         for idx, card in enumerate(cards):
-            self._cards_layout.addWidget(card, idx // cols, idx % cols)
+            self._cards_layout.addWidget(card, idx // cols, idx % cols, Qt.AlignCenter)
         remaining = len(cards) % cols
         if remaining:
             for _ in range(cols - remaining):
                 sp = QWidget()
-                sp.setFixedSize(160, 200)
-                self._cards_layout.addWidget(sp, len(cards) // cols, cols - remaining + _)
+                sp.setFixedSize(124, 200)
+                self._cards_layout.addWidget(sp, len(cards) // cols, cols - remaining + _, Qt.AlignCenter)
 
 
 # ---------------------------------------------------------------------------

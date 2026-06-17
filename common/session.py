@@ -23,6 +23,8 @@ class AuthResult:
     email     : str      = ''
     full_name : str      = ''
     role      : UserRole = field(default_factory=lambda: UserRole.ADMIN)
+    term_id   : int      = 0
+    term_label: str      = ''
 
 
 @dataclass

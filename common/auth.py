@@ -80,7 +80,7 @@ def _b64url(data: bytes) -> str:
 
 
 class OAuth2Manager:
-    PORT         = 8766
+    PORT         = 8765
     REDIRECT     = f'http://localhost:{PORT}/callback'
     GOOGLE_AUTH  = 'https://accounts.google.com/o/oauth2/v2/auth'
     GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token'

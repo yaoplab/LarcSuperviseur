@@ -82,6 +82,7 @@ class Database:
             if self._cloud:
                 self._cloud.close()
             params = self._pg_params('SupabaseDatabase')
+            params['sslmode'] = 'require'
             self._cloud = psycopg2.connect(**params)
             self._cloud.autocommit = True
             self._mode = DBMode.CLOUD
