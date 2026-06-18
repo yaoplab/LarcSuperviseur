@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QButtonGroup, QSizePolicy, QListWidget, QListWidgetItem,
     QMenu, QStackedWidget, QTabWidget, QCheckBox, QTimeEdit,
 )
-from PySide6.QtCore import Qt, QDate, QTimer, QSize, Signal, QDateTime, QTime
+from PySide6.QtCore import Qt, QDate, QTimer, QSize, Signal, QDateTime, QTime, QCoreApplication
 from PySide6.QtGui import QColor, QBrush, QPixmap, QFont, QIcon, QPainter, QPainterPath
 from PySide6.QtCharts import (
     QChart, QChartView, QBarSeries, QBarSet, QBarCategoryAxis,
@@ -986,6 +986,11 @@ class MainWindow(QWidget):
         top_layout.addWidget(self._today_btn)
         top_layout.addWidget(self._refresh_btn)
         top_layout.addWidget(self._theme_btn)
+        self._loading_label = QLabel()
+        self._loading_label.setStyleSheet(
+            f"font-size: 13px; color: {theme_manager.palette.primary}; font-weight: bold;")
+        self._loading_label.setVisible(False)
+        top_layout.addWidget(self._loading_label)
         top_layout.addStretch()
         top_layout.addWidget(self._network_label)
 
@@ -1570,14 +1575,17 @@ class MainWindow(QWidget):
             self._network_label.setText("Hors ligne")
             self._network_label.setStyleSheet(f"color: {p.text_disabled}; font-size: {s(12)}px;")
 
-    def _go_today(self):
-        self._current_date = QDate.currentDate()
-        self.refresh_all()
+    def _set_loading(self, busy: bool, msg: str = "Chargement..."):
+        self._loading_label.setText("⟳ " + msg if busy else "")
+        self._loading_label.setVisible(busy)
+        QCoreApplication.processEvents()
 
     def _load_initial_data(self):
+        self._set_loading(True, "Données initiales...")
         conn = db.server_conn
         if not conn:
             QMessageBox.warning(self, "Erreur", "Non connecté au serveur.")
+            self._set_loading(False)
             return
 
         try:
@@ -1612,10 +1620,12 @@ class MainWindow(QWidget):
 
             # Activer le mode groupe par défaut
             self._on_all_clicked()
+            self._set_loading(False)
 
         except Exception as e:
             log(f"_load_initial_data: {e}")
             QMessageBox.critical(self, "Erreur", str(e))
+            self._set_loading(False)
 
     def _on_period_changed(self, idx: int):
         if idx < 0:
@@ -1644,8 +1654,10 @@ class MainWindow(QWidget):
         self._load_global_history(mode)
 
     def _load_group_stats(self, mode: str):
+        self._set_loading(True, "Statistiques...")
         conn = db.server_conn
         if not conn or not self._current_term_id:
+            self._set_loading(False)
             return
 
         p = theme_manager.palette
@@ -1874,12 +1886,17 @@ class MainWindow(QWidget):
             else:
                 self._donut_chart.setTitle("Taux de présence — aucune donnée")
 
+            self._set_loading(False)
+
         except Exception as e:
             log(f"_load_group_stats: {e}")
+            self._set_loading(False)
 
     def _load_global_history(self, mode: str):
+        self._set_loading(True, "Événements...")
         conn = db.server_conn
         if not conn or not self._current_term_id:
+            self._set_loading(False)
             return
 
         try:
@@ -1991,9 +2008,11 @@ class MainWindow(QWidget):
             hh.setSectionResizeMode(7, QHeaderView.Stretch)
             hh.setSectionResizeMode(8, QHeaderView.Interactive); self._history_table.setColumnWidth(8, 200)
             hh.setSectionResizeMode(9, QHeaderView.Interactive); self._history_table.setColumnWidth(9, 130)
+            self._set_loading(False)
 
         except Exception as e:
             log(f"_load_global_history: {e}")
+            self._set_loading(False)
 
     # ---- Mode classe -------------------------------------------------------
 
@@ -2006,8 +2025,10 @@ class MainWindow(QWidget):
         self._selected_student_id = 0
 
     def _load_students(self, class_id: int):
+        self._set_loading(True, "Élèves...")
         conn = db.server_conn
         if not conn or not self._current_term_id:
+            self._set_loading(False)
             return
 
         date_from, date_to = self._period_dates()
@@ -2078,9 +2099,11 @@ class MainWindow(QWidget):
                     spacer = QWidget()
                     spacer.setFixedSize(124, 200)
                     self._cards_layout.addWidget(spacer, len(self._students) // cols, cols - remaining + _, Qt.AlignCenter)
+            self._set_loading(False)
 
         except Exception as e:
             log(f"_load_students: {e}")
+            self._set_loading(False)
 
     def _on_student_selected(self, student_id: int):
         self._selected_student_id = student_id
@@ -2114,6 +2137,7 @@ class MainWindow(QWidget):
             if not conn:
                 QMessageBox.warning(self, "Erreur", "Aucune connexion base de données.")
                 return
+            self._set_loading(True, "Enregistrement...")
             try:
                 cur = conn.cursor()
                 cur.execute(
@@ -2124,16 +2148,20 @@ class MainWindow(QWidget):
                      data['note'], data['source'], session.user_id)
                 )
                 conn.commit()
+                self._set_loading(False)
             except Exception as e:
                 log(f"_on_add_event insert: {e}")
+                self._set_loading(False)
                 conn.rollback()
                 QMessageBox.critical(self, "Erreur", f"Échec de l'enregistrement : {e}")
                 return
             self._load_student_detail(sid)
 
     def _load_student_detail(self, student_id: int):
+        self._set_loading(True, "Détail élève...")
         conn = db.server_conn
         if not conn or not self._current_class_id:
+            self._set_loading(False)
             return
 
         p = theme_manager.palette
@@ -2289,9 +2317,11 @@ class MainWindow(QWidget):
             self._sd_tabs.show()
             self._sd_placeholder.hide()
             self._class_stack.setCurrentIndex(1)
+            self._set_loading(False)
 
         except Exception as e:
             log(f"_load_student_detail: {e}")
+            self._set_loading(False)
 
     # ---- Utilitaires -------------------------------------------------------
 
