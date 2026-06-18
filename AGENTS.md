@@ -1,110 +1,76 @@
-# AGENTS.md
+# AGENTS.md — LarcSuperviseur V1.1
 
 ## What this is
 
 PySide6 (Qt6) desktop app for student attendance/event supervision.
-Direct psycopg2 connection to PostgreSQL — no REST API, no ORM, no local DB.
-Windows-only target. French-language UI and code comments.
+Direct psycopg2 PostgreSQL — no ORM, no REST API.
+Windows-only. French UI.
 
 ## How to run
 
 ```bash
-# From the PARENT directory (C:\Projets), NOT from inside LarcSuperviseur/
+# From C:\Projets (parent dir), NOT inside LarcSuperviseur/
 python -m LarcSuperviseur
 ```
 
-The package uses `LarcSuperviseur` as its import root. `main.py` and `__main__.py` both add the parent dir to `sys.path`.
+`main.py` / `__main__.py` add parent dir to `sys.path`.
 
-## Critical: sibling project dependency
+## Critical: sibling dependency
 
-`eLarcProfPy/` must exist as a sibling directory at `C:\Projets\eLarcProfPy\`. It provides:
-- `config.ini` (database credentials) — referenced by `common/database.py`, `common/network.py`, `common/auth.py`
-- Auth module (`common/auth.py`) imported at runtime
+`eLarcProfPy/` at `C:\Projets\eLarcProfPy/` provides `config.ini` (DB creds).
+Without it, login fails. `_find_cfg()` searches `../config.ini` then `../../eLarcProfPy/config.ini`.
 
-Without it, login fails. The `_find_cfg()` function in `database.py`, `network.py`, and `auth.py` searches both `../config.ini` and `../../eLarcProfPy/config.ini`.
+## Architecture (V1.1 — 18 juin 2026)
 
-## config.ini — never commit
+| Path | Role | Lines |
+|---|---|---|
+| `views/main_window.py` | Orchestrator: top bar, signal wiring | 310 |
+| `views/panels/sidebar.py` | Left nav: programs + classes | 150 |
+| `views/panels/group_panel.py` | Group stats: KPIs, charts, history | 464 |
+| `views/panels/class_panel.py` | Student cards grid | 72 |
+| `views/panels/student_detail.py` | Student detail: photo, info, events | 415 |
+| `views/core/data_loader.py` | ALL DB queries (32 methods) | 682 |
+| `views/core/event_actions.py` | Event CRUD | 117 |
+| `views/core/event_dialog.py` | Event edit dialog | 87 |
+| `views/core/cardsList/` | StudentCard, grid, avatar, config | ~200 |
+| `views/dialogs/event_generator.py` | Event creation dialog | 497 |
+| `views/dialogs/timetable_editor.py` | Timetable editor | 263 |
+| `common/` | Shared infra (to migrate to LarcCommon) | — |
 
-`config.ini` is in `.gitignore`. It holds DB credentials for:
-- `IntranetDatabase` section (PostgreSQL `127.0.0.1:5432/NewLarcDB`)
-- `SupabaseDatabase` section (Cloud, read-only)
-- OAuth2 settings in `[OAuth2]` section
+## Refactoring done today
 
-If missing, the app logs a warning and uses hardcoded defaults (localhost:5432).
+- `main_window.py`: 2573 → 310 lines (EventGenerator + TimetableEditor + TimeSlotGrid extracted)
+- `functions/` deleted → migrated to `views/core/cardsList/`
+- `common/event_helpers.py` created (was 3 copies)
+- `views/core/event_dialog.py` (shared edit dialog, was 2 copies)
+- EventActions used by both group_panel & student_detail (SQL inline removed)
+- Old docs archived as `LarcSuperviseur V0.1.zip`
+- New docs in `docs/`, algorithms in `algo/`
 
-## Architecture
+## Rules
 
-| Path | Role |
-|---|---|
-| `main.py` | Entry point: QApplication + LoginWindow |
-| `common/database.py` | `db` singleton — psycopg2 connections to Intranet and Cloud |
-| `common/session.py` | `session` global — holds current user, role, conn_mode |
-| `common/auth.py` | OAuth2 PKCE + local password auth |
-| `common/network.py` | `detect_network()` → (intranet_ok, internet_ok) |
-| `common/theme.py` | `theme_manager` — 3 Material Design 3 themes |
-| `common/photos.py` | `get_photo_path(sid)` — local or Supabase Storage download |
-| `common/app_config.py` | `app_config` — loads key/value from `larcauth_config` table |
-| `views/login.py` | LoginWindow with rate limiting (5 attempts → 30s lockout) |
-| `views/main_window.py` | MainWindow (~2650 lines) + EventGenerator — the entire UI |
-| `sql/student_event.sql` | DDL for `student_event` table + trigger |
-| `sql/run_ddl.py` | Runs DDL against Intranet DB |
+- No test framework, no linting — run the app to verify
+- Imports: `LarcSuperviseur.*` package paths only
+- Panels: never write SQL directly, use DataLoader / EventActions
+- `event_icon()` / `event_color()` in `common/event_helpers.py` (single source)
+- Photos: `photos/{sid}.png`, cached in `photos/cache/`
+- Refresh timer: 30s in MainWindow
 
-## Database notes
+## DB notes
 
-- `student_event` is INSERT-only (temporal traces, no update/delete)
-- `event_type` stores hierarchical paths like `"Bureau BI > Violence > Auteur"` from `larcauth_type_event` (27 rows, IDs 100-499)
-- Old keyword values (`absence`, `exit`, etc.) still work via `ILIKE` in queries
-- `agenda_day_id` is auto-resolved by trigger from `event_at` timestamp
+- `student_event`: INSERT-only temporal traces
+- `event_type`: hierarchical paths like "Bureau BI > Violence > Auteur" (27 rows, IDs 100-499)
+- Old keywords (`absence`, `exit`) still work via `ILIKE`
 - `autocommit = True` on all connections
+- Table `larcauth_type_event`: 27 lignes (IDs 100-499, 4 categories). Fichier SQL perdu — à re-générer si restauration DB
+- Après restauration DB: `python -m LarcSuperviseur.sql.run_ddl`
 
 ## User roles
 
-SUPERVISEUR (write), COORD (write + validate), ADMIN (full). Checked via `type_supervisor`, `type_coordonator`, `is_adm` boolean columns.
+SUPERVISEUR (write), COORD (write + validate), ADMIN (full).
+Columns: `type_supervisor`, `type_coordonator`, `is_adm`.
 
-## Key conventions
+## Next
 
-- No test framework, no linting, no type checking configured — verify changes by running the app
-- All imports use `LarcSuperviseur.*` package paths (not relative)
-- Photos: `photos/{student_id}.png` (500×500, transparent background)
-- Refresh timer: 30 seconds in MainWindow
-- Theme switch rebuilds the entire stylesheet (not just palette swap)
-
-## LoginWindow design (17 juin 2026)
-
-- Window 420×679px (ratio φ ≈1.618)
-- All pixel values from Fibonacci {8, 13, 21, 34, 55, 89, 144, 233}
-- Margins 34px left/right, 21px top/bottom
-- MD3 spacings: form rows 16px, sections 24px, after button 16px
-- Logo 89px, fields 55px, button 210×55px, font 13px
-- Labels above fields (VBoxLayout, not QFormLayout side-by-side)
-- Button centered (both onglets)
-- Onglet Intranet hidden when Intranet unreachable; double-clic logo → checkbox "Choisir connexion" → both visible
-- `_tab_intranet()` uses VBoxLayout; `_tab_cloud()` uses QVBoxLayout
-
-## PhotoPreloader (common/photos.py)
-
-- `PhotoPreloader(QThread)` background precharge of student photos
-- `ensure_cached()` copie locale uniquement (pas de download Supabase en precharge)
-- `get_uncached_ids()` scanne `photos/` et `photos/cache/` (pas de requête DB)
-- Cache prioritaire : `photos/cache/` avant `photos/`
-- Timeout Supabase 5s dans `get_photo_path()`
-
-## Supabase / Cloud
-
-- `database.py`: `sslmode='require'` ajouté à `connect_cloud()` (obligatoire Supabase)
-- OAuth2 Google port 8765, `@arc-en-ciel.org` only
-- `session.py`: AuthResult avec `term_id`/`term_label`
-
-## DB restoration
-
-- DB locale perdue le 17 juin — backup 3 semaines à restaurer
-- Après restauration : executer `python -m LarcSuperviseur.sql.run_ddl` (student_event table + vues)
-- Table `larcauth_type_event` : 27 lignes (IDs 100-499, 4 categories). Fichier `sql/01_add_type_event.sql` perdu — à re-générer depuis les données Supabase ou re-créer manuellement
-
-## Gotchas
-
-- `main_window.py` is a single ~2650-line file containing MainWindow and EventGenerator — read it in sections
-- `_event_icon()` and `_event_color()` must handle both old keywords and new hierarchical paths
-- The app expects to be run on a machine with network access to the PostgreSQL server at `192.168.2.90` (or configured host)
-- `sql/run_ddl.py` has hardcoded path `C:\Projets\eLarcProfPy` — adjust if running elsewhere
-- Push GitHub : remote URL a un token expiré (`ghp_yaoplab`). Mettre à jour avec `git remote set-url origin https://yaoplab:NOUVEAU_TOKEN@github.com/yaoplab/LarcSuperviseur.git`
+- Create `LarcCommon` shared package (with eLarcProfPy, LarcSecretaire):
+  database, network, logger, session, auth, theme, photos, app_config, event_helpers, audit, mail
