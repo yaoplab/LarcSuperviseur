@@ -10,21 +10,7 @@ except ImportError:
     _PG_OK = False
 
 from .logger import log as _log
-
-
-def _find_cfg() -> str:
-    here = os.path.dirname(os.path.abspath(__file__))
-    candidates = [
-        os.path.join(here, '..', 'config.ini'),
-        os.path.join(here, '..', '..', 'eLarcProfPy', 'config.ini'),
-    ]
-    for p in candidates:
-        p = os.path.normpath(p)
-        if os.path.isfile(p):
-            return p
-    _log("AVERTISSEMENT : config.ini introuvable. Utilisation des valeurs par défaut.")
-    print("AVERTISSEMENT : config.ini introuvable. Utilisation des valeurs par défaut.")
-    return os.path.normpath(candidates[0])
+from .config_loader import find_cfg
 
 
 class DBMode(Enum):
@@ -34,6 +20,10 @@ class DBMode(Enum):
 
 
 class Database:
+    app_name: str = 'LarcSuperviseur'
+    intranet_db: str = 'NewLarcDB'
+    cloud_db: str = 'postgres'
+
     def __init__(self) -> None:
         self._intranet: Optional[object] = None
         self._cloud:    Optional[object] = None
@@ -42,15 +32,19 @@ class Database:
 
     def _pg_params(self, section: str) -> dict:
         cfg = configparser.ConfigParser()
-        cfg.read(_find_cfg())
-        default_db = 'NewLarcDB' if section == 'IntranetDatabase' else 'postgres'
+        cfg_path = find_cfg()
+        cfg.read(cfg_path)
+        if not os.path.isfile(cfg_path):
+            _log("AVERTISSEMENT : config.ini introuvable. Utilisation des valeurs par défaut.")
+            print("AVERTISSEMENT : config.ini introuvable. Utilisation des valeurs par défaut.")
+        default_db = self.intranet_db if section == 'IntranetDatabase' else self.cloud_db
         return {
             'host':             cfg.get(section, 'Host', fallback='127.0.0.1'),
             'port':             cfg.getint(section, 'Port', fallback=5432),
             'dbname':           cfg.get(section, 'DB',   fallback=default_db),
             'user':             cfg.get(section, 'User', fallback='postgres'),
             'password':         cfg.get(section, 'Pass', fallback=''),
-            'application_name': 'LarcSuperviseur',
+            'application_name': self.app_name,
             'connect_timeout':  5,
         }
 

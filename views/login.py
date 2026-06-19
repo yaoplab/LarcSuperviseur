@@ -1,12 +1,11 @@
 import os
-import sys
 import hashlib
 from typing import Optional
 import time
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QLineEdit,
-    QMessageBox, QApplication, QTabWidget, QFormLayout, QCheckBox,
-    QHBoxLayout, QProgressDialog,
+    QMessageBox, QApplication, QTabWidget, QCheckBox,
+    QProgressDialog,
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QEvent
 from PySide6.QtGui import QPixmap
@@ -326,6 +325,7 @@ class LoginWindow(QWidget):
             )
             row = cur.fetchone()
             if row is None:
+                self._set_busy(False)
                 self._show_error("Utilisateur introuvable.")
                 db.disconnect_all()
                 return
@@ -334,11 +334,13 @@ class LoginWindow(QWidget):
 
             pass_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
             if pwd_hash and pwd_hash != pass_hash:
+                self._set_busy(False)
                 self._show_error("Mot de passe incorrect.")
                 db.disconnect_all()
                 return
 
             if not (is_dir or is_coord or is_sup):
+                self._set_busy(False)
                 self._show_error(
                     "Cette application est r\u00e9serv\u00e9e aux superviseurs, "
                     "coordinateurs et administrateurs.")
@@ -356,10 +358,24 @@ class LoginWindow(QWidget):
             session.conn_mode = ConnMode.INTRANET
             session.is_authenticated = True
 
+            try:
+                cur.execute("""
+                    SELECT t.id, t.label FROM larcauth_term t, larcauth_academicyear ay
+                    WHERE ay.s_id = 1 AND t.trim = ay.current_term_number
+                    LIMIT 1
+                """)
+                r = cur.fetchone()
+                if r:
+                    session.term_id = int(r[0])
+                    session.term_label = r[1]
+            except Exception:
+                pass
+
             log(f"Connexion Intranet : {session.full_name} ({role.value})")
             self._open_main_window()
 
         except Exception as e:
+            self._set_busy(False)
             log(f"_on_intranet: {e}")
             self._show_error(str(e))
             db.disconnect_all()
@@ -394,6 +410,8 @@ class LoginWindow(QWidget):
         session.role = res.role
         session.conn_mode = ConnMode.CLOUD
         session.is_authenticated = True
+        session.term_id = res.term_id
+        session.term_label = res.term_label
 
         log(f"Connexion Cloud : {session.full_name} ({res.role.value})")
         self._open_main_window()

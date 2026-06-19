@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Optional
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
 

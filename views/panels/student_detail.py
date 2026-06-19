@@ -9,7 +9,7 @@ from PySide6.QtCharts import (
     QChart, QChartView, QLineSeries, QDateTimeAxis, QValueAxis,
 )
 
-from LarcSuperviseur.common.database import db
+from LarcSuperviseur.views.core.data_loader import DataLoader
 from LarcSuperviseur.common.session import session
 from LarcSuperviseur.common.theme import theme_manager
 from LarcSuperviseur.common.photos import get_photo_path
@@ -29,6 +29,7 @@ class StudentDetail(QWidget):
         super().__init__(parent)
         self._student_id = 0
         self._actions = EventActions()
+        self._loader = DataLoader()
         self._init_ui()
 
     def _period_dates(self) -> tuple[str, str]:
@@ -205,165 +206,113 @@ class StudentDetail(QWidget):
 
     def load(self, student_id: int):
         self._student_id = student_id
-        conn = db.server_conn
-        if not conn:
-            return
-
         p = theme_manager.palette
         date_from, date_to = self._period_dates()
 
-        try:
-            cur = conn.cursor()
+        info = self._loader.get_student_info(student_id)
+        if not info:
+            return
 
-            # -- Infos \u00e9l\u00e8ve + coordonn\u00e9es --
-            cur.execute("""
-                SELECT aec.last_name, aec.first_name,
-                       aec.email, aec.emailperso,
-                       aec.tel_maison, aec.tel_smartphone_1,
-                       aec.date_entree, c.label
-                FROM larcauth_student s
-                JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id
-                JOIN larcauth_classroom c ON c.id = s.s_classroom_id
-                WHERE s.aecuser_ptr_id = %s
-            """, (student_id,))
-            r = cur.fetchone()
-            if not r:
-                return
-            last_name, first_name, email, email_perso, tel_maison, tel_portable, date_entree, cls_label = r
-            name = f"{first_name} {last_name}"
-            self._sd_header.setText(f"<b>{name}</b>")
-            self._sd_class.setText(cls_label)
+        name = f"{info['first_name']} {info['last_name']}"
+        self._sd_header.setText(f"<b>{name}</b>")
+        self._sd_class.setText(info['class_label'])
 
-            # Coordonn\u00e9es
-            self._sd_contact_labels['full_name'].setText(
-                f"<b>Nom :</b> {last_name.upper()} {first_name}")
-            self._sd_contact_labels['email'].setText(
-                f"<b>Email :</b> {email or '\u2014'}")
-            self._sd_contact_labels['email_perso'].setText(
-                f"<b>Email personnel :</b> {email_perso or '\u2014'}")
-            self._sd_contact_labels['tel_maison'].setText(
-                f"<b>T\u00e9l. maison :</b> {tel_maison or '\u2014'}")
-            self._sd_contact_labels['tel_portable'].setText(
-                f"<b>T\u00e9l. portable :</b> {tel_portable or '\u2014'}")
-            self._sd_contact_labels['date_entree'].setText(
-                f"<b>Date d'entr\u00e9e :</b> {date_entree.strftime('%d/%m/%Y') if date_entree else '\u2014'}")
+        self._sd_contact_labels['full_name'].setText(
+            f"<b>Nom :</b> {info['last_name'].upper()} {info['first_name']}")
+        self._sd_contact_labels['email'].setText(
+            f"<b>Email :</b> {info.get('email') or '\u2014'}")
+        self._sd_contact_labels['email_perso'].setText(
+            f"<b>Email personnel :</b> {info.get('email_perso') or '\u2014'}")
+        self._sd_contact_labels['tel_maison'].setText(
+            f"<b>T\u00e9l. maison :</b> {info.get('tel_maison') or '\u2014'}")
+        self._sd_contact_labels['tel_portable'].setText(
+            f"<b>T\u00e9l. portable :</b> {info.get('tel_portable') or '\u2014'}")
+        self._sd_contact_labels['date_entree'].setText(
+            f"<b>Date d'entr\u00e9e :</b> {info.get('date_entree').strftime('%d/%m/%Y') if info.get('date_entree') else '\u2014'}")
 
-            # Photo
-            pix = QPixmap(get_photo_path(student_id))
-            if not pix.isNull():
-                self._sd_photo.setPixmap(
-                    pix.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            if not self._sd_photo.pixmap() or self._sd_photo.pixmap().isNull():
-                self._sd_photo.setText("\U0001f4f7")
+        pix = QPixmap(get_photo_path(student_id))
+        if not pix.isNull():
+            self._sd_photo.setPixmap(
+                pix.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        if not self._sd_photo.pixmap() or self._sd_photo.pixmap().isNull():
+            self._sd_photo.setText("\U0001f4f7")
 
-            # -- KPIs --
-            cur.execute("""
-                SELECT
-                    COUNT(*) FILTER (WHERE event_type = %s OR event_type ILIKE %s) AS abs_count,
-                    COUNT(*) FILTER (WHERE event_type = %s OR event_type ILIKE %s OR event_type ILIKE %s) AS exit_count,
-                    COUNT(*) AS total
-                FROM student_event
-                WHERE student_id = %s AND DATE(event_at) BETWEEN %s AND %s
-            """, ('absence', 'Suivi > Absence%', 'exit', 'Sortie%', '%Fuite%', student_id, date_from, date_to))
-            kpi = cur.fetchone()
-            abs_count, exit_count, total = kpi if kpi else (0, 0, 0)
-            self._sd_kpis['abs'].setText(str(abs_count))
-            self._sd_kpis['exit'].setText(str(exit_count))
-            self._sd_kpis['total'].setText(str(total))
+        kpi = self._loader.get_student_kpis(student_id, date_from, date_to)
+        self._sd_kpis['abs'].setText(str(kpi.get('abs_count', 0)))
+        self._sd_kpis['exit'].setText(str(kpi.get('exit_count', 0)))
+        self._sd_kpis['total'].setText(str(kpi.get('total', 0)))
 
-            # -- Chart \u00e9volution absences sur le trimestre --
-            self._sd_chart.removeAllSeries()
-            for ax in self._sd_chart.axes():
-                self._sd_chart.removeAxis(ax)
+        self._sd_chart.removeAllSeries()
+        for ax in self._sd_chart.axes():
+            self._sd_chart.removeAxis(ax)
 
-            from datetime import datetime, timedelta
-            term_start = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
-            term_end = datetime.now().strftime('%Y-%m-%d')
+        from datetime import datetime, timedelta
+        term_start = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+        term_end = datetime.now().strftime('%Y-%m-%d')
 
-            cur.execute("""
-                SELECT DATE(event_at) AS d, COUNT(*) AS cnt
-                FROM student_event
-                WHERE student_id = %s AND (event_type = %s OR event_type ILIKE %s)
-                  AND DATE(event_at) BETWEEN %s AND %s
-                GROUP BY d ORDER BY d
-            """, (student_id, 'absence', 'Suivi > Absence%', term_start, term_end))
-            trend = cur.fetchall()
+        trend = self._loader.get_student_absence_trend(student_id, term_start, term_end)
+        if trend:
+            line = QLineSeries()
+            line.setColor(QColor(p.error))
+            for row in trend:
+                d = row['date']
+                cnt = row['count']
+                qd = QDate(d.year, d.month, d.day)
+                dt = QDateTime(qd, QTime(0, 0))
+                line.append(dt.toMSecsSinceEpoch(), cnt)
+            self._sd_chart.addSeries(line)
+            self._sd_chart.setTitle("\u00c9volution des absences (trimestre)")
+            self._sd_chart.setAnimationOptions(QChart.SeriesAnimations)
+            self._sd_chart.legend().setVisible(False)
+            ax_x = QDateTimeAxis()
+            ax_x.setFormat("dd/MM")
+            ax_x.setLabelsAngle(-45)
+            self._sd_chart.addAxis(ax_x, Qt.AlignBottom)
+            line.attachAxis(ax_x)
+            ax_y = QValueAxis()
+            max_t = max(row['count'] for row in trend)
+            ax_y.setRange(0, max_t + 2)
+            self._sd_chart.addAxis(ax_y, Qt.AlignLeft)
+            line.attachAxis(ax_y)
+        else:
+            self._sd_chart.setTitle("\u00c9volution des absences \u2014 aucune donn\u00e9e")
 
-            if trend:
-                line = QLineSeries()
-                line.setColor(QColor(p.error))
-                for d, cnt in trend:
-                    qd = QDate(d.year, d.month, d.day)
-                    dt = QDateTime(qd, QTime(0, 0))
-                    line.append(dt.toMSecsSinceEpoch(), cnt)
-                self._sd_chart.addSeries(line)
-                self._sd_chart.setTitle("\u00c9volution des absences (trimestre)")
-                self._sd_chart.setAnimationOptions(QChart.SeriesAnimations)
-                self._sd_chart.legend().setVisible(False)
-                ax_x = QDateTimeAxis()
-                ax_x.setFormat("dd/MM")
-                ax_x.setLabelsAngle(-45)
-                self._sd_chart.addAxis(ax_x, Qt.AlignBottom)
-                line.attachAxis(ax_x)
-                ax_y = QValueAxis()
-                max_t = max(r[1] for r in trend)
-                ax_y.setRange(0, max_t + 2)
-                self._sd_chart.addAxis(ax_y, Qt.AlignLeft)
-                line.attachAxis(ax_y)
-            else:
-                self._sd_chart.setTitle("\u00c9volution des absences \u2014 aucune donn\u00e9e")
+        evts = self._loader.get_student_events(student_id)
+        self._sd_events.setRowCount(len(evts))
+        self._sd_events.setColumnCount(8)
+        self._sd_events.setHorizontalHeaderLabels(["ID", "Type", "Lieu", "Mati\u00e8re", "Date", "Note", "Cr\u00e9\u00e9 par", "Valid\u00e9"])
+        self._sd_events.setColumnHidden(0, True)
+        for i, evt in enumerate(evts):
+            ei = event_icon(evt['event_type'])
+            color = event_color(evt['event_type'])
+            items = [
+                QTableWidgetItem(str(evt['event_id'])),
+                QTableWidgetItem(f"{ei} {evt['event_type']}"),
+                QTableWidgetItem(evt.get('lieu_label') or ''),
+                QTableWidgetItem(evt.get('subject_label') or ''),
+                QTableWidgetItem(evt['event_at'].strftime('%d/%m %H:%M') if evt.get('event_at') else ''),
+                QTableWidgetItem(evt.get('note') or ''),
+                QTableWidgetItem(evt.get('creator')),
+                QTableWidgetItem("\u2713" if evt.get('validated_by') else ''),
+            ]
+            items[1].setForeground(QBrush(QColor(color)))
+            for j, it in enumerate(items):
+                if j not in (1, 5):
+                    it.setTextAlignment(Qt.AlignCenter)
+                it.setFlags(it.flags() & ~Qt.ItemIsEditable)
+                self._sd_events.setItem(i, j, it)
+        hh = self._sd_events.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.Fixed);     self._sd_events.setColumnWidth(0, 0)
+        hh.setSectionResizeMode(1, QHeaderView.Interactive); self._sd_events.setColumnWidth(1, 300)
+        hh.setSectionResizeMode(2, QHeaderView.Interactive); self._sd_events.setColumnWidth(2, 120)
+        hh.setSectionResizeMode(3, QHeaderView.Interactive); self._sd_events.setColumnWidth(3, 110)
+        hh.setSectionResizeMode(4, QHeaderView.Interactive); self._sd_events.setColumnWidth(4, 100)
+        hh.setSectionResizeMode(5, QHeaderView.Stretch)
+        hh.setSectionResizeMode(6, QHeaderView.Interactive); self._sd_events.setColumnWidth(6, 200)
+        hh.setSectionResizeMode(7, QHeaderView.Interactive); self._sd_events.setColumnWidth(7, 200)
 
-            # -- Derniers \u00e9v\u00e9nements --
-            cur.execute("""
-                SELECT se.event_id, se.event_type, se.event_at, se.lieu_label, se.subject_label, se.note,
-                       u.last_name || ' ' || u.first_name AS creator,
-                       se.validated_by
-                FROM student_event se
-                LEFT JOIN larcauth_aecuser u ON u.id = se.created_by
-                WHERE se.student_id = %s
-                ORDER BY se.event_at DESC
-                LIMIT 20
-            """, (student_id,))
-            evts = cur.fetchall()
-            self._sd_events.setRowCount(len(evts))
-            self._sd_events.setColumnCount(8)
-            self._sd_events.setHorizontalHeaderLabels(["ID", "Type", "Lieu", "Mati\u00e8re", "Date", "Note", "Cr\u00e9\u00e9 par", "Valid\u00e9"])
-            self._sd_events.setColumnHidden(0, True)
-            for i, (eid, etype, e_at, lieu, subject, note, creator, validated) in enumerate(evts):
-                ei = event_icon(etype)
-                color = event_color(etype)
-                items = [
-                    QTableWidgetItem(str(eid)),
-                    QTableWidgetItem(f"{ei} {etype}"),
-                    QTableWidgetItem(lieu or ''),
-                    QTableWidgetItem(subject or ''),
-                    QTableWidgetItem(e_at.strftime('%d/%m %H:%M') if e_at else ''),
-                    QTableWidgetItem(note or ''),
-                    QTableWidgetItem(creator),
-                    QTableWidgetItem("\u2713" if validated else ''),
-                ]
-                items[1].setForeground(QBrush(QColor(color)))
-                for j, it in enumerate(items):
-                    if j not in (1, 5):
-                        it.setTextAlignment(Qt.AlignCenter)
-                    it.setFlags(it.flags() & ~Qt.ItemIsEditable)
-                    self._sd_events.setItem(i, j, it)
-            hh = self._sd_events.horizontalHeader()
-            hh.setSectionResizeMode(0, QHeaderView.Fixed);     self._sd_events.setColumnWidth(0, 0)
-            hh.setSectionResizeMode(1, QHeaderView.Interactive); self._sd_events.setColumnWidth(1, 300)
-            hh.setSectionResizeMode(2, QHeaderView.Interactive); self._sd_events.setColumnWidth(2, 120)
-            hh.setSectionResizeMode(3, QHeaderView.Interactive); self._sd_events.setColumnWidth(3, 110)
-            hh.setSectionResizeMode(4, QHeaderView.Interactive); self._sd_events.setColumnWidth(4, 100)
-            hh.setSectionResizeMode(5, QHeaderView.Stretch)
-            hh.setSectionResizeMode(6, QHeaderView.Interactive); self._sd_events.setColumnWidth(6, 200)
-            hh.setSectionResizeMode(7, QHeaderView.Interactive); self._sd_events.setColumnWidth(7, 200)
-
-            # Afficher les tabs, cacher le placeholder
-            self._sd_tabs.show()
-            self._sd_placeholder.hide()
-
-        except Exception as e:
-            log(f"StudentDetail.load: {e}")
+        self._sd_tabs.show()
+        self._sd_placeholder.hide()
 
     def _on_add_event(self):
         sid = self._student_id
@@ -372,24 +321,9 @@ class StudentDetail(QWidget):
         dlg = EventGenerator(sid, self)
         if dlg.exec():
             data = dlg.get_data()
-            conn = db.server_conn
-            if not conn:
-                QMessageBox.warning(self, "Erreur", "Aucune connexion base de donn\u00e9es.")
-                return
-            try:
-                cur = conn.cursor()
-                cur.execute(
-                    "INSERT INTO student_event (student_id, event_type, event_at, lieu_label, subject_label, note, source, created_by) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                    (data['student_id'], data['event_type'], data['event_at'],
-                     data['lieu_label'], data.get('subject_label', ''),
-                     data['note'], data['source'], session.user_id)
-                )
-                conn.commit()
-            except Exception as e:
-                log(f"_on_add_event insert: {e}")
-                conn.rollback()
-                QMessageBox.critical(self, "Erreur", f"\u00c9chec de l'enregistrement : {e}")
+            data['created_by'] = session.user_id
+            if not self._loader.insert_event(data):
+                QMessageBox.critical(self, "Erreur", "\u00c9chec de l'enregistrement.")
                 return
             self.load(sid)
 

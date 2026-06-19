@@ -3,11 +3,11 @@ from PySide6.QtWidgets import (
     QDateEdit, QFrame, QGridLayout, QButtonGroup, QStackedWidget,
     QTextEdit, QDialogButtonBox, QMessageBox, QWidget, QTimeEdit,
 )
-from PySide6.QtCore import Qt, QDate, QTime, QDateTime
+from PySide6.QtCore import Qt, QDate, QTime
 from LarcSuperviseur.common.database import db
-from LarcSuperviseur.common.logger import log
 from LarcSuperviseur.common.network import detect_network
 from LarcSuperviseur.common.theme import theme_manager
+from LarcSuperviseur.views.core.data_loader import DataLoader
 
 
 class EventGenerator(QDialog):
@@ -25,6 +25,7 @@ class EventGenerator(QDialog):
         self._type_hierarchy = {}
         self._student_classroom_id = None
         self._student_classroom_label = ""
+        self._loader = DataLoader()
         self.setWindowTitle(f"Événement — élève #{student_id}")
         self.setMinimumWidth(600)
         self._load_student_classroom()
@@ -32,40 +33,13 @@ class EventGenerator(QDialog):
         self._init_ui()
 
     def _load_student_classroom(self):
-        conn = db.server_conn
-        if not conn:
-            return
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT s.s_classroom_id, c.label
-                FROM larcauth_student s
-                JOIN larcauth_classroom c ON c.id = s.s_classroom_id
-                WHERE s.aecuser_ptr_id = %s
-            """, (self._student_id,))
-            r = cur.fetchone()
-            if r:
-                self._student_classroom_id = r[0]
-                self._student_classroom_label = r[1]
-        except Exception as e:
-            log(f"EventGenerator._load_student_classroom: {e}")
+        data = self._loader.get_student_classroom(self._student_id)
+        if data:
+            self._student_classroom_id = data['classroom_id']
+            self._student_classroom_label = data['label']
 
     def _get_term_id(self) -> int:
-        conn = db.server_conn
-        if not conn:
-            return 0
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT t.id FROM larcauth_term t, larcauth_academicyear ay
-                WHERE ay.s_id = 1 AND t.trim = ay.current_term_number
-                ORDER BY t.id LIMIT 1
-            """)
-            r = cur.fetchone()
-            return r[0] if r else 0
-        except Exception as e:
-            log(f"EventGenerator._get_term_id: {e}")
-            return 0
+        return self._loader.get_term_id()
 
     def _init_ui(self):
         layout = QVBoxLayout()
@@ -74,23 +48,8 @@ class EventGenerator(QDialog):
         fs = 10
         sp = 8
         rd = 4
-        conn = db.server_conn
-
         # --- 1. Infos élève ---
-        student_name = f"Élève #{self._student_id}"
-        if conn:
-            try:
-                cur = conn.cursor()
-                cur.execute(
-                    "SELECT aec.last_name || ' ' || aec.first_name FROM larcauth_student s "
-                    "JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id WHERE s.aecuser_ptr_id = %s",
-                    (self._student_id,)
-                )
-                r = cur.fetchone()
-                if r:
-                    student_name = r[0]
-            except Exception:
-                pass
+        student_name = self._loader.get_student_name(self._student_id) or f"Élève #{self._student_id}"
         top_row = QHBoxLayout()
         name_label = QLabel(f"<b>{student_name}</b>")
         name_label.setStyleSheet(f"font-size: {s(16)}px; padding: 8px; color: {p.text_strong};")
@@ -287,75 +246,32 @@ class EventGenerator(QDialog):
         self._clear_grid(self._subject_grid)
         if not self._student_classroom_id:
             return
-        conn = db.server_conn
-        if not conn:
-            return
-        try:
-            cur = conn.cursor()
-            term_id = self._get_term_id()
-            try:
-                cur.execute("""
-                    SELECT cts.id, cts.label, cts.fk_teacher_id,
-                           aec.last_name || ' ' || aec.first_name AS teacher_name
-                    FROM larcauth_classroom_termsubject cts
-                    LEFT JOIN larcauth_aecuser aec ON aec.id = cts.fk_teacher_id
-                    WHERE cts.fk_classroom_id = %s
-                      AND cts.fk_term_id = %s
-                      AND cts.enabled = TRUE
-                    ORDER BY cts.label
-                """, (self._student_classroom_id, term_id))
-            except Exception:
-                cur.execute("""
-                    SELECT cts.id, cts.label, cts.fk_teacher_id,
-                           aec.last_name || ' ' || aec.first_name AS teacher_name
-                    FROM larcauth_classroom_termsubject cts
-                    LEFT JOIN larcauth_aecuser aec ON aec.id = cts.fk_teacher_id
-                    WHERE cts.fk_classroom_id = %s
-                      AND cts.enabled = TRUE
-                    ORDER BY cts.label
-                """, (self._student_classroom_id,))
-            self._subjects = list(cur.fetchall())
-            p = theme_manager.palette
-            s = theme_manager.font_size
-            subj_style = (
-                f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
-                f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
-                f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
-                f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
-                f"QPushButton:checked {{ background: {p.primary_container}; "
-                f"border: 2px solid {p.primary}; }}"
-            )
-            for idx, (sid, label, tid, tname) in enumerate(self._subjects):
-                display = label
-                btn = QPushButton(display)
-                btn.setCheckable(True)
-                btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                btn.setMinimumHeight(60)
-                tip = tname or ""
-                btn.setToolTip(tip)
-                btn.setStyleSheet(subj_style)
-                self._subject_group.addButton(btn, sid)
-                self._subject_grid.addWidget(btn, idx // 4, idx % 4)
-        except Exception as e:
-            log(f"EventGenerator._load_subjects: {e}")
+        term_id = self._get_term_id()
+        self._subjects = self._loader.get_classroom_subjects(self._student_classroom_id, term_id)
+        p = theme_manager.palette
+        s = theme_manager.font_size
+        subj_style = (
+            f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
+            f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
+            f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
+            f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
+            f"QPushButton:checked {{ background: {p.primary_container}; "
+            f"border: 2px solid {p.primary}; }}"
+        )
+        for idx, (sid, label, tid, tname) in enumerate(self._subjects):
+            display = label
+            btn = QPushButton(display)
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setMinimumHeight(60)
+            tip = tname or ""
+            btn.setToolTip(tip)
+            btn.setStyleSheet(subj_style)
+            self._subject_group.addButton(btn, sid)
+            self._subject_grid.addWidget(btn, idx // 4, idx % 4)
 
     def _load_locations(self):
-        self._locations = []
-        conn = db.server_conn
-        if not conn:
-            return
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT DISTINCT ON ("s_IDLieu") "IDLieu", "s_IDLieu", "Lieu"
-                FROM larcauth_lieu
-                WHERE "fk_language" = 2 AND "IDLieu" > 0
-                  AND "Lieu" NOT IN ('---', 'Non précisé')
-                ORDER BY "s_IDLieu", "IDLieu"
-            """)
-            self._locations = list(cur.fetchall())
-        except Exception as e:
-            log(f"EventGenerator._load_locations: {e}")
+        self._locations = self._loader.get_locations()
 
     def _on_lieu_changed(self, btn):
         lid = self._lieu_group.id(btn)
@@ -380,31 +296,7 @@ class EventGenerator(QDialog):
             self._source_label.setStyleSheet(f"color: {p.primary}; font-size: {s(10)}px;")
 
     def _load_types_from_db(self):
-        conn = db.server_conn
-        if not conn:
-            return
-        try:
-            cur = conn.cursor()
-            cur.execute('''
-                SELECT idtypeevent, type_event,
-                       COALESCE("Event_Niveau2", '') AS niv2,
-                       COALESCE("Event_Niveau3", '') AS niv3
-                FROM larcauth_type_event
-                WHERE "Enabled" IS NOT FALSE
-                ORDER BY idtypeevent
-            ''')
-            self._type_hierarchy = {}
-            for _, cat, niv2, niv3 in cur.fetchall():
-                if cat not in self._type_hierarchy:
-                    self._type_hierarchy[cat] = {}
-                if niv2:
-                    if niv2 not in self._type_hierarchy[cat]:
-                        self._type_hierarchy[cat][niv2] = []
-                    if niv3:
-                        self._type_hierarchy[cat][niv2].append(niv3)
-        except Exception as e:
-            log(f"EventGenerator._load_types_from_db: {e}")
-            self._type_hierarchy = {}
+        self._type_hierarchy = self._loader.get_event_types_tree()
 
     def _on_cat_toggled(self, category: str):
         self._selected_category = category

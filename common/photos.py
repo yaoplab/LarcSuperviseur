@@ -6,29 +6,31 @@ from .session import session, ConnMode
 from .app_config import app_config
 from .logger import log
 
-_SUPABASE_REF = "crvyxfsuvwqxzlhsfbwq"
-_STORAGE_URL = f"https://{_SUPABASE_REF}.supabase.co/storage/v1/object/public/student-photos"
+SUPABASE_REF = "crvyxfsuvwqxzlhsfbwq"
+STORAGE_BUCKET = "student-photos"
+PHOTO_EXT = ".png"
+_STORAGE_URL = f"https://{SUPABASE_REF}.supabase.co/storage/v1/object/public/{STORAGE_BUCKET}"
 _SUPABASE_TIMEOUT = 5
 
 
 def _intranet_path(sid: int) -> str:
-    return os.path.join(app_config.get("photos_dir"), f"{sid}.png")
+    return os.path.join(app_config.get("photos_dir"), f"{sid}{PHOTO_EXT}")
 
 
 def _cache_path(sid: int) -> str:
-    return os.path.join(app_config.get("photos_cache_dir"), f"{sid}.png")
+    return os.path.join(app_config.get("photos_cache_dir"), f"{sid}{PHOTO_EXT}")
 
 
 def _supabase_download(sid: int, dest: str) -> bool:
     try:
         os.makedirs(os.path.dirname(dest), exist_ok=True)
-        url = f"{_STORAGE_URL}/{sid}.png"
+        url = f"{_STORAGE_URL}/{sid}{PHOTO_EXT}"
         with urllib.request.urlopen(url, timeout=_SUPABASE_TIMEOUT) as resp:
             with open(dest, 'wb') as f:
                 f.write(resp.read())
         return True
     except Exception as e:
-        log(f"Photos: echec telechargement {sid}.png ({e})")
+        log(f"Photos: echec telechargement {sid}{PHOTO_EXT} ({e})")
         return False
 
 

@@ -36,6 +36,8 @@ class Session:
     conn_mode        : Optional[ConnMode] = None
     is_authenticated : bool               = False
     instance_dir     : str                = ''
+    term_id          : int                = 0
+    term_label       : str                = ''
 
 
 session: Session = Session(

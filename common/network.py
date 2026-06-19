@@ -4,18 +4,7 @@ import configparser
 import urllib.request
 from enum import Enum
 
-
-def _find_cfg() -> str:
-    here = os.path.dirname(os.path.abspath(__file__))
-    candidates = [
-        os.path.join(here, '..', 'config.ini'),
-        os.path.join(here, '..', '..', 'eLarcProfPy', 'config.ini'),
-    ]
-    for p in candidates:
-        p = os.path.normpath(p)
-        if os.path.isfile(p):
-            return p
-    return os.path.normpath(candidates[0])
+from .config_loader import find_cfg
 
 
 class NetworkMode(Enum):
@@ -26,7 +15,7 @@ class NetworkMode(Enum):
 
 def detect_network() -> tuple[bool, bool]:
     cfg = configparser.ConfigParser()
-    cfg.read(_find_cfg())
+    cfg.read(find_cfg())
     host = cfg.get('IntranetDatabase', 'Host', fallback='192.168.2.90')
     port = cfg.getint('IntranetDatabase', 'Port', fallback=5432)
 

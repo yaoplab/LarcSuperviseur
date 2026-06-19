@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
-    QDateEdit, QFrame, QTabWidget, QMenu, QDialog, QMessageBox,
+    QFrame, QTabWidget, QMenu, QDialog, QMessageBox,
 )
 from PySide6.QtCore import Qt, QDate, QDateTime, QTime, QCoreApplication
 from PySide6.QtGui import QColor, QBrush, QFont, QPainter
@@ -100,16 +100,6 @@ class GroupPanel(QWidget):
         filter_row.addWidget(QLabel("Type:"))
         filter_row.addWidget(self._history_filter_type)
         filter_row.addSpacing(10)
-        self._history_filter_date_from = QDateEdit()
-        self._history_filter_date_from.setCalendarPopup(True)
-        self._history_filter_date_from.setDate(QDate.currentDate().addMonths(-1))
-        filter_row.addWidget(QLabel("Du:"))
-        filter_row.addWidget(self._history_filter_date_from)
-        self._history_filter_date_to = QDateEdit()
-        self._history_filter_date_to.setCalendarPopup(True)
-        self._history_filter_date_to.setDate(QDate.currentDate())
-        filter_row.addWidget(QLabel("Au:"))
-        filter_row.addWidget(self._history_filter_date_to)
         filter_btn = QPushButton("Filtrer")
         filter_btn.setCursor(Qt.PointingHandCursor)
         filter_btn.clicked.connect(self._load_history)
@@ -189,14 +179,11 @@ class GroupPanel(QWidget):
 
         self._main_layout.addLayout(bottom_row)
 
-    def load(self, mode: str, date_from: str | None = None, date_to: str | None = None):
+    def load(self, mode: str, date_from: str, date_to: str):
         self._current_mode = mode
         self._term_id = self._loader.get_active_term()
         if not self._term_id:
             return
-
-        if date_from is None or date_to is None:
-            date_from, date_to = self._period_dates()
 
         self._set_loading(True, "Statistiques...")
         try:
@@ -357,9 +344,9 @@ class GroupPanel(QWidget):
         else:
             self._donut_chart.setTitle("Taux de présence — aucune donnée")
 
-        self._load_history()
+        self._load_history(date_from, date_to)
 
-    def _load_history(self):
+    def _load_history(self, date_from: str, date_to: str):
         if not self._term_id:
             return
         self._set_loading(True, "Événements...")
@@ -376,8 +363,6 @@ class GroupPanel(QWidget):
 
             sel_class = self._history_filter_class.currentData()
             sel_type = self._history_filter_type.currentText().strip()
-            date_from = self._history_filter_date_from.date().toString('yyyy-MM-dd')
-            date_to = self._history_filter_date_to.date().toString('yyyy-MM-dd')
 
             if sel_type == '':
                 sel_type = None
@@ -445,11 +430,6 @@ class GroupPanel(QWidget):
         except Exception as e:
             log(f"GroupPanel._load_history: {e}")
         self._set_loading(False)
-
-    def _period_dates(self) -> tuple[str, str]:
-        today = QDate.currentDate()
-        start = today.addMonths(-3)
-        return start.toString('yyyy-MM-dd'), today.toString('yyyy-MM-dd')
 
     def _set_loading(self, busy: bool, msg: str = "Chargement..."):
         self._loading_label.setText("⟳ " + msg if busy else "")

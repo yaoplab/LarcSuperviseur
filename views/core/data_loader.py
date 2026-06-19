@@ -64,6 +64,34 @@ class DataLoader:
             log(f"DataLoader.get_current_term_label: {e}")
             return ""
 
+    def get_unit_periods(self) -> list[dict]:
+        try:
+            cur = self._cursor()
+            cur.execute("""
+                SELECT up.id, up.unit_nr, up.label, up.start_date, up.end_date,
+                       up.fk_language
+                FROM larcauth_unit_period up
+                JOIN larcauth_academicyear ay ON ay.s_id = 1
+                WHERE up.start_date BETWEEN ay.start_date AND ay.end_date
+                ORDER BY up.unit_nr, up.fk_language
+            """)
+            rows = cur.fetchall()
+            # Une entrée par unit_nr, en préférant le français (fk_language=2)
+            best: dict[int, dict] = {}
+            for r in rows:
+                nr = r[1]
+                lang = r[5]
+                d = {'id': r[0], 'unit_nr': nr, 'label': r[2],
+                     'start_date': r[3].isoformat(),
+                     'end_date': r[4].isoformat(),
+                     'fk_language': lang}
+                if nr not in best or lang == 2:
+                    best[nr] = d
+            return [best[k] for k in sorted(best)]
+        except Exception as e:
+            log(f"DataLoader.get_unit_periods: {e}")
+            return []
+
     # ------------------------------------------------------------------
     # Programmes et classes
     # ------------------------------------------------------------------

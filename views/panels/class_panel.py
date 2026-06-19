@@ -1,8 +1,6 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QGridLayout
 from PySide6.QtCore import Qt, Signal, QDate
 
-from LarcSuperviseur.common.database import db
-from LarcSuperviseur.common.session import session
 from LarcSuperviseur.views.core.data_loader import DataLoader
 from LarcSuperviseur.views.core.cardsList.grid import fill_cards_grid
 from LarcSuperviseur.views.core.cardsList import StudentCard, DEFAULT_CONFIG

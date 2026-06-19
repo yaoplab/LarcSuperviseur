@@ -18,3 +18,6 @@ class CardConfig:
 
 
 DEFAULT_CONFIG = CardConfig()
+
+
+DEFAULT_CONFIG = CardConfig()

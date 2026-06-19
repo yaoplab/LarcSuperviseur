@@ -6,6 +6,8 @@ _here = os.path.dirname(os.path.abspath(__file__))
 
 
 class AppConfig:
+    CONFIG_TABLE = 'larcauth_config'
+
     DEFAULTS = {
         'photos_dir': os.path.normpath(
             os.path.join(_here, '..', 'photos')),
@@ -23,7 +25,7 @@ class AppConfig:
             return
         try:
             cur = conn.cursor()
-            cur.execute("SELECT key, value FROM larcauth_config")
+            cur.execute(f"SELECT key, value FROM {self.CONFIG_TABLE}")
             for key, value in cur.fetchall():
                 self._cache[key] = value
             self._loaded = True

@@ -4,10 +4,9 @@ from PySide6.QtWidgets import (
     QComboBox, QDialog,
 )
 from PySide6.QtCore import Qt, Signal
-from LarcSuperviseur.common.database import db
-from LarcSuperviseur.common.session import session
 from LarcSuperviseur.common.logger import log
 from LarcSuperviseur.common.theme import theme_manager
+from LarcSuperviseur.views.core.data_loader import DataLoader
 # EventGenerator imported lazily in _open_event_dialog to avoid circular import
 
 
@@ -16,6 +15,7 @@ class TimeSlotGrid(QWidget):
 
     def __init__(self):
         super().__init__()
+        self._loader = DataLoader()
         self._grid = QGridLayout()
         self._grid.setSpacing(1)
         self.setLayout(self._grid)
@@ -32,34 +32,9 @@ class TimeSlotGrid(QWidget):
         self._timeperiods.clear()
         self._current_student_id = student_id
 
-        conn = db.server_conn
-        if not conn:
+        self._timeperiods = self._loader.get_classroom_timeperiods(classroom_id, weekday, term_id)
+        if not self._timeperiods:
             return
-
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT tp.id, tp.debut, tp.fin, cht.id AS timetable_id
-                FROM larcauth_classroom_has_timeperiod cht
-                JOIN larcauth_timeperiod tp ON tp.id = cht.fk_timeperiod
-                WHERE cht.fk_classroom = %s
-                  AND cht.fk_weekday = %s
-                  AND cht.fk_term = %s
-                ORDER BY tp.debut
-            """, (classroom_id, weekday, term_id))
-            rows = cur.fetchall()
-        except Exception as e:
-            log(f"TimeSlotGrid.load: {e}")
-            return
-
-        if not rows:
-            return
-
-        # En-têtes : heures
-        self._timeperiods = [
-            {'id': r[0], 'debut': str(r[1])[:5], 'fin': str(r[2])[:5], 'timetable_id': r[3]}
-            for r in rows
-        ]
 
         for col, tp in enumerate(self._timeperiods):
             label = QLabel(f"{tp['debut']}-{tp['fin']}")
@@ -97,27 +72,13 @@ class TimeSlotGrid(QWidget):
                 "Sélectionnez d'abord un élève dans la liste de gauche.")
             return
         from LarcSuperviseur.views.dialogs.event_generator import EventGenerator
+        from LarcSuperviseur.common.session import session
         dlg = EventGenerator(self._current_student_id, self)
         if dlg.exec():
             data = dlg.get_data()
-            conn = db.server_conn
-            if not conn:
-                QMessageBox.warning(self, "Erreur", "Aucune connexion base de données.")
-                return
-            try:
-                cur = conn.cursor()
-                cur.execute(
-                    "INSERT INTO student_event (student_id, event_type, event_at, lieu_label, subject_label, note, source, created_by) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                    (data['student_id'], data['event_type'], data['event_at'],
-                     data['lieu_label'], data.get('subject_label', ''),
-                     data['note'], data['source'], session.user_id)
-                )
-                conn.commit()
-            except Exception as e:
-                log(f"_open_event_dialog insert: {e}")
-                conn.rollback()
-                QMessageBox.critical(self, "Erreur", f"Échec de l'enregistrement : {e}")
+            data['created_by'] = session.user_id
+            if not self._loader.insert_event(data):
+                QMessageBox.critical(self, "Erreur", "Échec de l'enregistrement.")
                 return
             self.window().refresh_all()
 
@@ -127,6 +88,7 @@ class TimetableEditor(QDialog):
 
     def __init__(self, class_id: int, class_label: str, term_id: int, parent=None):
         super().__init__(parent)
+        self._loader = DataLoader()
         self._class_id = class_id
         self._term_id = term_id
         self.setWindowTitle(f"Emploi du temps — {class_label}")
@@ -161,54 +123,20 @@ class TimetableEditor(QDialog):
         layout.addLayout(btn_row)
 
     def _load_data(self):
-        conn = db.server_conn
-        if not conn:
-            return
-
         try:
-            cur = conn.cursor()
-
-            # Tous les timeperiods triés par weekday, debut
-            cur.execute("""
-                SELECT id, debut, fin, weekday
-                FROM larcauth_timeperiod
-                WHERE enabled = TRUE
-                ORDER BY weekday, debut
-            """)
-            all_tps = cur.fetchall()
-
-            # Regrouper par jour
             from collections import defaultdict
+
+            all_tps = self._loader.get_timeperiods()
             self._tp_by_day: dict[int, list[tuple]] = defaultdict(list)
             for tp_id, debut, fin, wd in all_tps:
                 self._tp_by_day[wd].append((tp_id, debut, fin))
 
-            # classroom_has_timeperiod pour cette classe et ce term
-            cur.execute("""
-                SELECT cht.id, cht.fk_timeperiod, cht.fk_weekday,
-                       coalesce(cht.s_classroom_termsubject, cht.ref_classroom_termsubject, '')
-                FROM classroom_has_timeperiod cht
-                WHERE cht.fk_classroom = %s AND cht.fk_term = %s
-            """, (self._class_id, self._term_id))
-            existing = cur.fetchall()
-            # Map: (weekday, tp_id) → subject
-            self._cht_map: dict[tuple[int, int], str] = {}
-            self._cht_id_map: dict[tuple[int, int], str] = {}  # (wd, tp) → cht.id
-            for cht_id, tp_id, wd, subj in existing:
-                self._cht_map[(wd, tp_id)] = subj
-                self._cht_id_map[(wd, tp_id)] = cht_id
+            tt = self._loader.get_classroom_timetable(self._class_id, self._term_id)
+            self._cht_map = tt['cht_map']
+            self._cht_id_map = tt['cht_id_map']
 
-            # Matières disponibles pour cette classe
-            cur.execute("""
-                SELECT DISTINCT sub.label
-                FROM classroom_has_timeperiod cht
-                JOIN larcauth_subject sub ON sub.id = cht.ref_classroom_termsubject
-                WHERE cht.fk_classroom = %s AND cht.ref_classroom_termsubject IS NOT NULL
-                ORDER BY sub.label
-            """, (self._class_id,))
-            self._subjects = [''] + [r[0] for r in cur.fetchall()]
+            self._subjects = self._loader.get_available_subjects(self._class_id)
 
-            # Construire la grille
             self._build_grid()
 
         except Exception as e:
@@ -263,44 +191,19 @@ class TimetableEditor(QDialog):
             self._tt_grid.setColumnWidth(c, 140)
 
     def _save(self):
-        conn = db.server_conn
-        if not conn:
-            return
+        updated = 0
 
-        p = theme_manager.palette
-        try:
-            cur = conn.cursor()
-            updated = 0
+        for (row, day), combo in self._cell_combos.items():
+            tp_id = combo.property('tp_id')
+            cht_id = combo.property('cht_id')
+            subj = combo.currentText().strip()
 
-            for (row, day), combo in self._cell_combos.items():
-                tp_id = combo.property('tp_id')
-                cht_id = combo.property('cht_id')
-                subj = combo.currentText().strip()
+            if not cht_id:
+                continue
 
-                if not cht_id:
-                    continue  # ligne classroom_has_timeperiod manquante
+            subj_id = self._loader.get_subject_id_by_label(subj)
+            if self._loader.update_timetable_slot(cht_id, subj_id):
+                updated += 1
 
-                # Trouver l'id matière
-                cur.execute("SELECT id FROM larcauth_subject WHERE label = %s", (subj,))
-                r = cur.fetchone()
-                subj_id = r[0] if r else None
-
-                if subj_id:
-                    cur.execute(
-                        "UPDATE classroom_has_timeperiod SET ref_classroom_termsubject = %s WHERE id = %s",
-                        (subj_id, cht_id))
-                    updated += cur.rowcount
-                else:
-                    cur.execute(
-                        "UPDATE classroom_has_timeperiod SET ref_classroom_termsubject = NULL WHERE id = %s",
-                        (cht_id,))
-                    updated += cur.rowcount
-
-            conn.commit()
-            QMessageBox.information(self, "Succès", f"{updated} créneau(x) mis à jour.")
-            self.accept()
-
-        except Exception as e:
-            log(f"TimetableEditor._save: {e}")
-            conn.rollback()
-            QMessageBox.critical(self, "Erreur", str(e))
+        QMessageBox.information(self, "Succès", f"{updated} créneau(x) mis à jour.")
+        self.accept()

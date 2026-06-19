@@ -1,4 +1,4 @@
-"""AuthManager + OAuth2 PKCE pour LarcSuperviseur."""
+"""AuthManager + OAuth2 PKCE."""
 import os
 import hashlib
 import secrets
@@ -15,19 +15,7 @@ from typing import Tuple
 from .session import AuthResult, UserRole
 from .database import db, DBMode
 from .logger import log
-
-
-def _find_cfg() -> str:
-    here = os.path.dirname(os.path.abspath(__file__))
-    candidates = [
-        os.path.join(here, '..', 'config.ini'),
-        os.path.join(here, '..', '..', 'eLarcProfPy', 'config.ini'),
-    ]
-    for p in candidates:
-        p = os.path.normpath(p)
-        if os.path.isfile(p):
-            return p
-    return os.path.normpath(candidates[0])
+from .config_loader import find_cfg
 
 
 def _deduce_role_superviseur(is_dir: bool, is_coord: bool, is_sup: bool) -> UserRole:
@@ -64,10 +52,10 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.end_headers()
         self.wfile.write(
-            '<html><body style="font-family:sans-serif;text-align:center;padding:40px">'
-            '<h2>✔ Authentification réussie</h2>'
-            '<p>Vous pouvez fermer cet onglet et revenir à LarcSuperviseur.</p>'
-            '</body></html>'.encode('utf-8')
+            ('<html><body style="font-family:sans-serif;text-align:center;padding:40px">'
+             '<h2>✔ Authentification réussie</h2>'
+             '<p>Vous pouvez fermer cet onglet et revenir à {0}.</p>'
+             '</body></html>').format(OAuth2Manager.APP_DISPLAY).encode('utf-8')
         )
         _CallbackHandler.event.set()
 
@@ -80,15 +68,17 @@ def _b64url(data: bytes) -> str:
 
 
 class OAuth2Manager:
-    PORT         = 8765
-    REDIRECT     = f'http://localhost:{PORT}/callback'
-    GOOGLE_AUTH  = 'https://accounts.google.com/o/oauth2/v2/auth'
-    GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token'
+    PORT           = 8765
+    HOSTED_DOMAIN  = 'arc-en-ciel.org'
+    APP_DISPLAY    = 'LarcSuperviseur'
+    REDIRECT       = f'http://localhost:{PORT}/callback'
+    GOOGLE_AUTH    = 'https://accounts.google.com/o/oauth2/v2/auth'
+    GOOGLE_TOKEN   = 'https://oauth2.googleapis.com/token'
 
     @classmethod
     def authenticate(cls) -> Tuple[bool, AuthResult, str]:
         cfg = configparser.ConfigParser()
-        cfg.read(_find_cfg())
+        cfg.read(find_cfg())
         client_id     = cfg.get('OAuth2', 'ClientID',     fallback='')
         client_secret = cfg.get('OAuth2', 'ClientSecret', fallback='')
         if not client_id:
@@ -106,7 +96,7 @@ class OAuth2Manager:
             'code_challenge':        challenge,
             'code_challenge_method': 'S256',
             'state':                 state,
-            'hd':                    'arc-en-ciel.org',
+            'hd':                    cls.HOSTED_DOMAIN,
             'access_type':           'offline',
             'prompt':                'select_account',
         }
@@ -158,7 +148,7 @@ class OAuth2Manager:
 
         email = payload.get('email', '')
         hd    = payload.get('hd', '')
-        if hd != 'arc-en-ciel.org':
+        if hd != cls.HOSTED_DOMAIN:
             return False, AuthResult(), f'Domaine non autorisé : {hd or "(aucun)"}'
 
         conn = db.server_conn

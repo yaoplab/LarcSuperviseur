@@ -2,836 +2,33 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QDateEdit, QFrame, QScrollArea, QGridLayout,
-    QSplitter, QDialog, QDialogButtonBox, QTextEdit,
-    QButtonGroup, QSizePolicy, QListWidget, QListWidgetItem,
-    QMenu, QStackedWidget, QTabWidget, QCheckBox, QTimeEdit,
+    QDialog, QDialogButtonBox, QTextEdit,
+    QButtonGroup,
+    QMenu, QStackedWidget, QTabWidget, QTimeEdit,
 )
-from PySide6.QtCore import Qt, QDate, QTimer, QSize, Signal, QDateTime, QTime, QCoreApplication
-from PySide6.QtGui import QColor, QBrush, QPixmap, QFont, QIcon, QPainter, QPainterPath
+from PySide6.QtCore import Qt, QDate, QTimer, Signal, QDateTime, QTime
+from PySide6.QtGui import QColor, QBrush, QPixmap, QFont, QPainter
 from PySide6.QtCharts import (
     QChart, QChartView, QBarSeries, QBarSet, QBarCategoryAxis,
     QValueAxis, QPieSeries, QLineSeries, QDateTimeAxis,
 )
 from LarcSuperviseur.common.database import db
-from LarcSuperviseur.common.session import session, UserRole
+from LarcSuperviseur.common.session import session
 from LarcSuperviseur.common.logger import log
 from LarcSuperviseur.common.network import detect_network
 from LarcSuperviseur.common.theme import theme_manager
 from LarcSuperviseur.common.photos import get_photo_path
-import os, re
+from LarcSuperviseur.views.core.time_manager import TimeManager
+from LarcSuperviseur.views.top_bar import TopBar
+
+
+from LarcSuperviseur.common.event_helpers import event_icon, event_color
+from LarcSuperviseur.views.core.cardsList.card import StudentCard
+from LarcSuperviseur.views.dialogs.event_generator import EventGenerator
+from LarcSuperviseur.views.dialogs.timetable_editor import TimetableEditor
 
 
 # ---------------------------------------------------------------------------
-# Constantes
-# ---------------------------------------------------------------------------
-def _event_icon(event_type: str) -> str:
-    icons = {'arrival': '▲', 'departure': '▼', 'exit': '→', 'return': '←',
-             'absence': '✕', 'justified': '✓', 'late': '⏰'}
-    if event_type in icons:
-        return icons[event_type]
-    if event_type.startswith('Bureau BI'):
-        return '🔴'
-    if event_type.startswith('Médical'):
-        return '🏥'
-    if event_type.startswith('Sortie'):
-        return '🚪'
-    if event_type.startswith('Suivi'):
-        return '👁'
-    return '●'
-
-def _event_color(event_type: str) -> str:
-    colors = {'arrival': '#27ae60', 'departure': '#2980b9', 'exit': '#e67e22',
-              'return': '#2ecc71', 'absence': '#e74c3c', 'justified': '#95a5a6',
-              'late': '#f1c40f'}
-    if event_type in colors:
-        return colors[event_type]
-    if event_type.startswith('Bureau BI'):
-        return '#d32f2f'
-    if event_type.startswith('Médical'):
-        return '#1976d2'
-    if event_type.startswith('Sortie'):
-        return '#e65100'
-    if event_type.startswith('Suivi'):
-        return '#f9a825'
-    return '#555'
-
-
-# ---------------------------------------------------------------------------
-# Carte élève
-# ---------------------------------------------------------------------------
-class StudentCard(QFrame):
-    clicked = Signal(int)  # student_id
-
-    def __init__(self, student_id: int, last_name: str, first_name: str):
-        super().__init__()
-        self._sid = student_id
-        self._last_name = last_name
-        self._first_name = first_name
-        self.setFrameShape(QFrame.StyledPanel)
-        self._default_style = (
-            f"StudentCard {{"
-            f"  background: {theme_manager.palette.surface};"
-            f"  border: 1px solid {theme_manager.palette.outline_variant};"
-            f"  border-radius: 8px; padding: 8px;"
-            f"}}"
-            f"StudentCard:hover {{"
-            f"  background: {theme_manager.palette.surface_variant};"
-            f"  border-color: {theme_manager.palette.outline};"
-            f"}}"
-        )
-        self.setStyleSheet(self._default_style)
-        self.setFixedSize(124, 200)
-        self.setCursor(Qt.PointingHandCursor)
-
-        layout = QVBoxLayout()
-        layout.setSpacing(8)
-        layout.setContentsMargins(8, 8, 8, 8)
-
-        # Nom (en haut)
-        self._name_label = QLabel()
-        self._name_label.setTextFormat(Qt.RichText)
-        self._name_label.setAlignment(Qt.AlignCenter)
-        self._name_label.setText(
-            f"<b style='font-size:{theme_manager.font_size(13)}px'>{last_name}</b><br>"
-            f"<span style='font-size:{theme_manager.font_size(13)}px; color:{theme_manager.palette.text_soft}'>{first_name}</span>"
-        )
-
-        # Badge photo (conteneur coloré)
-        self._photo_badge = QFrame()
-        self._photo_badge.setFixedSize(89, 89)
-        self._photo_badge.setStyleSheet(
-            f"background: {theme_manager.palette.primary_container};"
-            f"border-radius: 8px;"
-        )
-        badge_layout = QVBoxLayout(self._photo_badge)
-        badge_layout.setAlignment(Qt.AlignCenter)
-        badge_layout.setContentsMargins(0, 0, 0, 0)
-
-        self._photo = QLabel()
-        self._photo.setFixedSize(89, 89)
-        self._photo.setAlignment(Qt.AlignCenter)
-
-        pix = QPixmap(get_photo_path(student_id))
-        if pix.isNull() or pix.size().isNull():
-            pix = self._make_avatar(last_name, first_name)
-        else:
-            pix = pix.scaled(89, 89, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self._photo.setPixmap(pix)
-
-        badge_layout.addWidget(self._photo)
-
-        # Statut
-        self._status_label = QLabel()
-        self._status_label.setAlignment(Qt.AlignCenter)
-        self._status_label.setStyleSheet(f"font-size: {theme_manager.font_size(13)}px; font-weight: bold;")
-
-        # Nb sorties
-        self._exit_label = QLabel()
-        self._exit_label.setAlignment(Qt.AlignCenter)
-        self._exit_label.setStyleSheet(f"font-size: {theme_manager.font_size(8)}px; color: {theme_manager.palette.text_disabled};")
-
-        layout.addWidget(self._name_label)
-        layout.addStretch()
-        layout.addWidget(self._photo_badge, 0, Qt.AlignCenter)
-        layout.addSpacing(8)
-        layout.addWidget(self._status_label)
-        layout.addWidget(self._exit_label)
-        self.setLayout(layout)
-
-    def _make_avatar(self, last_name: str, first_name: str) -> QPixmap:
-        initials = (last_name[:1] + first_name[:1]).upper() or '?'
-        colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c']
-        c = colors[hash(last_name + first_name) % len(colors)]
-        px = QPixmap(89, 89)
-        px.fill(Qt.transparent)
-        p = QPainter(px)
-        p.setRenderHint(QPainter.Antialiasing)
-        p.setBrush(QColor(c))
-        p.setPen(Qt.NoPen)
-        p.drawEllipse(0, 0, 89, 89)
-        p.setPen(QColor('#fff'))
-        font = p.font()
-        font.setPixelSize(34)
-        font.setBold(True)
-        p.setFont(font)
-        p.drawText(px.rect(), Qt.AlignCenter, initials)
-        p.end()
-        return px
-
-    def mousePressEvent(self, event):
-        self.clicked.emit(self._sid)
-        super().mousePressEvent(event)
-
-    def set_status(self, text: str, color: str):
-        self._status_label.setText(text)
-        self._status_label.setStyleSheet(
-            f"font-size: {theme_manager.font_size(13)}px; font-weight: bold; color: {color};")
-
-    def set_exit_count(self, count: int):
-        self._exit_label.setText(f"{count} sortie(s)" if count else '')
-
-    def set_absent(self, absent: bool):
-        p = theme_manager.palette
-        if absent:
-            self.setStyleSheet(
-                f"StudentCard {{"
-                f"  background: {p.error_container};"
-                f"  border: 2px solid {p.error};"
-                f"  border-radius: 8px; padding: 8px;"
-                f"}}"
-                f"StudentCard:hover {{"
-                f"  background: #FFC9C0; border-color: {p.error};"
-                f"}}")
-        else:
-            self.setStyleSheet(self._default_style)
-
-
-# ---------------------------------------------------------------------------
-# Grille emploi du temps
-# ---------------------------------------------------------------------------
-class TimeSlotGrid(QWidget):
-    slotClicked = Signal(int, str, str)  # student_id, timeperiod_id, timetable_id
-
-    def __init__(self):
-        super().__init__()
-        self._grid = QGridLayout()
-        self._grid.setSpacing(1)
-        self.setLayout(self._grid)
-        self._slots: dict[str, QPushButton] = {}
-        self._current_student_id: int = 0
-        self._timeperiods: list[dict] = []
-
-    def load(self, classroom_id: int, term_id: int, weekday: int, student_id: int = 0):
-        for i in reversed(range(self._grid.count())):
-            w = self._grid.itemAt(i).widget()
-            if w:
-                w.deleteLater()
-        self._slots.clear()
-        self._timeperiods.clear()
-        self._current_student_id = student_id
-
-        conn = db.server_conn
-        if not conn:
-            return
-
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT tp.id, tp.debut, tp.fin, cht.id AS timetable_id
-                FROM larcauth_classroom_has_timeperiod cht
-                JOIN larcauth_timeperiod tp ON tp.id = cht.fk_timeperiod
-                WHERE cht.fk_classroom = %s
-                  AND cht.fk_weekday = %s
-                  AND cht.fk_term = %s
-                ORDER BY tp.debut
-            """, (classroom_id, weekday, term_id))
-            rows = cur.fetchall()
-        except Exception as e:
-            log(f"TimeSlotGrid.load: {e}")
-            return
-
-        if not rows:
-            return
-
-        # En-têtes : heures
-        self._timeperiods = [
-            {'id': r[0], 'debut': str(r[1])[:5], 'fin': str(r[2])[:5], 'timetable_id': r[3]}
-            for r in rows
-        ]
-
-        for col, tp in enumerate(self._timeperiods):
-            label = QLabel(f"{tp['debut']}-{tp['fin']}")
-            label.setAlignment(Qt.AlignCenter)
-            label.setStyleSheet(
-                f"font-weight: bold; font-size: {theme_manager.font_size(10)}px; padding: 2px; "
-                f"color: {theme_manager.palette.text_strong};")
-            self._grid.addWidget(label, 0, col)
-
-        btn = QPushButton("Ajouter événement")
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        btn.setStyleSheet(
-            f"font-size: {s(9)}px; padding: 4px; "
-            f"background: {p.surface_variant}; border: 1px solid {p.outline_variant}; "
-            f"color: {p.text_strong};")
-        btn.clicked.connect(lambda: self._open_event_dialog(0, '', ''))
-        self._grid.addWidget(btn, 1, 0, 1, len(self._timeperiods))
-
-    def set_student(self, student_id: int):
-        self._current_student_id = student_id
-        self._update_student_labels()
-
-    def _update_student_labels(self):
-        for key, btn in self._slots.items():
-            sid, tp_id = map(int, key.split(':'))
-            if self._current_student_id and sid != self._current_student_id:
-                btn.setVisible(False)
-            else:
-                btn.setVisible(True)
-
-    def _open_event_dialog(self, timetable_id=None, timeperiod_id=None, slot_label=None):
-        if not self._current_student_id:
-            QMessageBox.information(self, "Info",
-                "Sélectionnez d'abord un élève dans la liste de gauche.")
-            return
-        dlg = EventGenerator(self._current_student_id, self)
-        if dlg.exec():
-            data = dlg.get_data()
-            conn = db.server_conn
-            if not conn:
-                QMessageBox.warning(self, "Erreur", "Aucune connexion base de données.")
-                return
-            try:
-                cur = conn.cursor()
-                cur.execute(
-                    "INSERT INTO student_event (student_id, event_type, event_at, lieu_label, subject_label, note, source, created_by) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                    (data['student_id'], data['event_type'], data['event_at'],
-                     data['lieu_label'], data.get('subject_label', ''),
-                     data['note'], data['source'], session.user_id)
-                )
-                conn.commit()
-            except Exception as e:
-                log(f"_open_event_dialog insert: {e}")
-                conn.rollback()
-                QMessageBox.critical(self, "Erreur", f"Échec de l'enregistrement : {e}")
-                return
-            self.window().refresh_all()
-
-
-# ---------------------------------------------------------------------------
-# Écran génération d'événement
-# ---------------------------------------------------------------------------
-class EventGenerator(QDialog):
-    def __init__(self, student_id: int, parent=None):
-        super().__init__(parent)
-        self._student_id = student_id
-        self._subjects = []
-        self._locations = []
-        self._classroom_lieu_ids = set()
-        self._selected_lieu_id = 0
-        self._selected_lieu_label = ""
-        self._selected_category = None
-        self._selected_niv2 = None
-        self._selected_type_path = None
-        self._type_hierarchy = {}
-        self._student_classroom_id = None
-        self._student_classroom_label = ""
-        self.setWindowTitle(f"Événement — élève #{student_id}")
-        self.setMinimumWidth(600)
-        self._load_student_classroom()
-        self._load_types_from_db()
-        self._init_ui()
-
-    def _load_student_classroom(self):
-        conn = db.server_conn
-        if not conn:
-            return
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT s.s_classroom_id, c.label
-                FROM larcauth_student s
-                JOIN larcauth_classroom c ON c.id = s.s_classroom_id
-                WHERE s.aecuser_ptr_id = %s
-            """, (self._student_id,))
-            r = cur.fetchone()
-            if r:
-                self._student_classroom_id = r[0]
-                self._student_classroom_label = r[1]
-        except Exception as e:
-            log(f"EventGenerator._load_student_classroom: {e}")
-
-    def _get_term_id(self) -> int:
-        conn = db.server_conn
-        if not conn:
-            return 0
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT t.id FROM larcauth_term t, larcauth_academicyear ay
-                WHERE ay.s_id = 1 AND t.trim = ay.current_term_number
-                ORDER BY t.id LIMIT 1
-            """)
-            r = cur.fetchone()
-            return r[0] if r else 0
-        except Exception as e:
-            log(f"EventGenerator._get_term_id: {e}")
-            return 0
-
-    def _init_ui(self):
-        layout = QVBoxLayout()
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        fs = 10
-        sp = 8
-        rd = 4
-        conn = db.server_conn
-
-        # --- 1. Infos élève ---
-        student_name = f"Élève #{self._student_id}"
-        if conn:
-            try:
-                cur = conn.cursor()
-                cur.execute(
-                    "SELECT aec.last_name || ' ' || aec.first_name FROM larcauth_student s "
-                    "JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id WHERE s.aecuser_ptr_id = %s",
-                    (self._student_id,)
-                )
-                r = cur.fetchone()
-                if r:
-                    student_name = r[0]
-            except Exception:
-                pass
-        top_row = QHBoxLayout()
-        name_label = QLabel(f"<b>{student_name}</b>")
-        name_label.setStyleSheet(f"font-size: {s(16)}px; padding: 8px; color: {p.text_strong};")
-        top_row.addWidget(name_label)
-        if self._student_classroom_label:
-            top_row.addStretch()
-            cls_label = QLabel(f"<b>{self._student_classroom_label}</b>")
-            cls_label.setStyleSheet(f"font-size: {s(16)}px; padding: 8px; color: {p.text_soft};")
-            top_row.addWidget(cls_label)
-        layout.addLayout(top_row)
-
-        # --- 2. Date et Heure séparées ---
-        dt_frame = QFrame()
-        dt_frame.setStyleSheet(
-            f"background: {p.surface_variant}; border-radius: {rd}px; padding: 6px;")
-        dt_layout = QHBoxLayout(dt_frame)
-        dt_layout.setSpacing(sp)
-
-        dt_layout.addWidget(QLabel("Date :"))
-        self._date_edit = QDateEdit(QDate.currentDate())
-        self._date_edit.setCalendarPopup(True)
-        self._date_edit.setDisplayFormat("dddd dd MMMM yyyy")
-        self._date_edit.setStyleSheet(
-            f"padding: 6px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
-            f"font-size: {s(12)}px; background: {p.surface}; color: {p.text_strong}; "
-            f"font-weight: bold;")
-        dt_layout.addWidget(self._date_edit, 1)
-
-        dt_layout.addWidget(QLabel("Heure :"))
-        self._time_edit = QTimeEdit(QTime.currentTime())
-        self._time_edit.setDisplayFormat("HH:mm")
-        self._time_edit.setStyleSheet(
-            f"padding: 6px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
-            f"font-size: {s(12)}px; background: {p.surface}; color: {p.text_strong}; "
-            f"font-weight: bold;")
-        dt_layout.addWidget(self._time_edit)
-
-        self._source_label = QLabel()
-        self._update_source_label()
-        dt_layout.addWidget(self._source_label)
-        layout.addWidget(dt_frame)
-
-        # --- 3. Lieu ---
-        layout.addSpacing(sp)
-        lieu_header_row = QHBoxLayout()
-        lieu_header_row.addWidget(QLabel("<b>Lieu :</b>"))
-        if self._student_classroom_label:
-            self._classe_label = QLabel(f"Classe : {self._student_classroom_label}")
-            self._classe_label.setStyleSheet(f"font-size: {s(12)}px; color: {p.text_soft}; padding: 4px 8px;")
-            lieu_header_row.addStretch()
-            lieu_header_row.addWidget(self._classe_label)
-        layout.addLayout(lieu_header_row)
-
-        lieu_btn_style = (
-            f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
-            f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
-            f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
-            f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
-            f"QPushButton:checked {{ background: {p.primary_container}; "
-            f"border: 2px solid {p.primary}; }}"
-        )
-
-        self._classroom_lieu_ids = set()
-        self._lieu_group = QButtonGroup(self)
-        self._lieu_group.setExclusive(True)
-        lieu_grid = QGridLayout()
-        lieu_grid.setSpacing(8)
-        self._load_locations()
-        for idx, (lid, sid, lieu_name) in enumerate(self._locations):
-            btn = QPushButton(lieu_name)
-            btn.setCheckable(True)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(64)
-            btn.setStyleSheet(lieu_btn_style)
-            if idx == 0:
-                btn.setChecked(True)
-                self._selected_lieu_id = lid
-                self._selected_lieu_label = lieu_name
-            self._lieu_group.addButton(btn, lid)
-            lieu_grid.addWidget(btn, idx // 4, idx % 4)
-            if sid == 1:
-                self._classroom_lieu_ids.add(lid)
-        self._lieu_group.buttonClicked.connect(self._on_lieu_changed)
-        layout.addLayout(lieu_grid)
-
-        # --- 4. Matière ---
-        layout.addSpacing(sp)
-        self._matiere_group_widget = QWidget()
-        matiere_vbox = QVBoxLayout(self._matiere_group_widget)
-        matiere_vbox.setContentsMargins(0, 0, 0, 0)
-        matiere_vbox.addWidget(QLabel("<b>Matière :</b>"))
-
-        self._subject_group = QButtonGroup(self)
-        self._subject_group.setExclusive(True)
-        self._subject_grid = QGridLayout()
-        self._subject_grid.setSpacing(8)
-        matiere_vbox.addLayout(self._subject_grid)
-        self._load_subjects()
-        layout.addWidget(self._matiere_group_widget)
-        self._refresh_matiere_visibility()
-
-        # --- 5. Type d'événement hiérarchique ---
-        layout.addSpacing(sp)
-        layout.addWidget(QLabel("<b>Type d'événement :</b>"))
-        layout.addSpacing(4)
-
-        # Barre de sélection cliquable (remplace _sel_label)
-        self._sel_btn = QPushButton("")
-        self._sel_btn.setStyleSheet(
-            f"QPushButton {{ background: {p.surface_variant}; color: {p.primary}; "
-            f"font-size: {s(12)}px; font-weight: bold; padding: 6px 12px; "
-            f"border: 1px solid {p.outline_variant}; border-radius: {rd}px; text-align: left; }}"
-            f"QPushButton:hover {{ border-color: {p.primary}; }}")
-        self._sel_btn.setMinimumHeight(24)
-        self._sel_btn.setCursor(Qt.PointingHandCursor)
-        self._sel_btn.clicked.connect(self._on_sel_clicked)
-        layout.addWidget(self._sel_btn)
-
-        self._cat_colors = {'Bureau BI': '#d32f2f', 'Médical': '#1976d2',
-                            'Sortie': '#e65100', 'Suivi': '#f9a825'}
-        self._cat_group = QButtonGroup(self)
-
-        # Zone de choix unique (stack)
-        self._type_stack = QStackedWidget()
-
-        # Page 0 : catégories
-        self._type_page_niv1 = QWidget()
-        cat_grid = QGridLayout(self._type_page_niv1)
-        cat_grid.setSpacing(10)
-        cats = list(self._type_hierarchy.keys())
-        for idx, cat in enumerate(cats):
-            bg = self._cat_colors.get(cat, '#888')
-            fg = '#fff' if cat != 'Suivi' else '#222'
-            btn = QPushButton(cat)
-            btn.setCheckable(True)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(64)
-            btn.setStyleSheet(
-                f"QPushButton {{ background: {bg}; color: {fg}; font-weight: bold; "
-                f"border: 2px solid {p.outline_variant}; border-radius: 10px; "
-                f"font-size: {s(12)}px; padding: 8px 12px; }}"
-                f"QPushButton:hover {{ border: 2px solid #fff; }}"
-                f"QPushButton:checked {{ border: 3px solid #fff; background: {bg}; }}"
-            )
-            btn.toggled.connect(lambda checked, c=cat: self._on_cat_toggled(c) if checked else None)
-            self._cat_group.addButton(btn)
-            cat_grid.addWidget(btn, idx // 2, idx % 2)
-        self._type_stack.addWidget(self._type_page_niv1)
-
-        # Page 1 : niveau 2
-        self._type_page_niv2 = QWidget()
-        self._niv2_layout = QVBoxLayout(self._type_page_niv2)
-        self._niv2_layout.setContentsMargins(0, 0, 0, 0)
-        self._niv2_grid = QGridLayout()
-        self._niv2_grid.setSpacing(8)
-        self._niv2_layout.addLayout(self._niv2_grid)
-        self._type_stack.addWidget(self._type_page_niv2)
-
-        # Page 2 : niveau 3
-        self._type_page_niv3 = QWidget()
-        self._niv3_layout = QVBoxLayout(self._type_page_niv3)
-        self._niv3_layout.setContentsMargins(0, 0, 0, 0)
-        self._niv3_grid = QGridLayout()
-        self._niv3_grid.setSpacing(8)
-        self._niv3_layout.addLayout(self._niv3_grid)
-        self._type_stack.addWidget(self._type_page_niv3)
-
-        self._type_stack.setCurrentIndex(0)
-        self._type_stack.setMinimumHeight(200)
-        layout.addWidget(self._type_stack, 1)
-
-        # --- 6. Note ---
-        layout.addSpacing(sp)
-        layout.addWidget(QLabel("<b>Note :</b>"))
-        self._note_input = QTextEdit()
-        self._note_input.setPlaceholderText("Note optionnelle (200 caractères max)")
-        self._note_input.setMaximumHeight(80)
-        self._note_input.setStyleSheet(
-            f"padding: 4px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
-            f"font-size: {s(fs)}px; background: {p.surface}; color: {p.text_strong};")
-        layout.addWidget(self._note_input)
-
-        # --- 6. Boutons ---
-        layout.addSpacing(sp)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.setStyleSheet(f"font-size: {s(fs)}px;")
-        buttons.accepted.connect(self._validate)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-        self.setLayout(layout)
-
-    def _load_subjects(self):
-        self._clear_grid(self._subject_grid)
-        if not self._student_classroom_id:
-            return
-        conn = db.server_conn
-        if not conn:
-            return
-        try:
-            cur = conn.cursor()
-            term_id = self._get_term_id()
-            try:
-                cur.execute("""
-                    SELECT cts.id, cts.label, cts.fk_teacher_id,
-                           aec.last_name || ' ' || aec.first_name AS teacher_name
-                    FROM larcauth_classroom_termsubject cts
-                    LEFT JOIN larcauth_aecuser aec ON aec.id = cts.fk_teacher_id
-                    WHERE cts.fk_classroom_id = %s
-                      AND cts.fk_term_id = %s
-                      AND cts.enabled = TRUE
-                    ORDER BY cts.label
-                """, (self._student_classroom_id, term_id))
-            except Exception:
-                cur.execute("""
-                    SELECT cts.id, cts.label, cts.fk_teacher_id,
-                           aec.last_name || ' ' || aec.first_name AS teacher_name
-                    FROM larcauth_classroom_termsubject cts
-                    LEFT JOIN larcauth_aecuser aec ON aec.id = cts.fk_teacher_id
-                    WHERE cts.fk_classroom_id = %s
-                      AND cts.enabled = TRUE
-                    ORDER BY cts.label
-                """, (self._student_classroom_id,))
-            self._subjects = list(cur.fetchall())
-            p = theme_manager.palette
-            s = theme_manager.font_size
-            subj_style = (
-                f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
-                f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
-                f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
-                f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
-                f"QPushButton:checked {{ background: {p.primary_container}; "
-                f"border: 2px solid {p.primary}; }}"
-            )
-            for idx, (sid, label, tid, tname) in enumerate(self._subjects):
-                display = label
-                btn = QPushButton(display)
-                btn.setCheckable(True)
-                btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                btn.setMinimumHeight(60)
-                tip = tname or ""
-                btn.setToolTip(tip)
-                btn.setStyleSheet(subj_style)
-                self._subject_group.addButton(btn, sid)
-                self._subject_grid.addWidget(btn, idx // 4, idx % 4)
-        except Exception as e:
-            log(f"EventGenerator._load_subjects: {e}")
-
-    def _load_locations(self):
-        self._locations = []
-        conn = db.server_conn
-        if not conn:
-            return
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT DISTINCT ON ("s_IDLieu") "IDLieu", "s_IDLieu", "Lieu"
-                FROM larcauth_lieu
-                WHERE "fk_language" = 2 AND "IDLieu" > 0
-                  AND "Lieu" NOT IN ('---', 'Non pr\u00e9cis\u00e9')
-                ORDER BY "s_IDLieu", "IDLieu"
-            """)
-            self._locations = list(cur.fetchall())
-        except Exception as e:
-            log(f"EventGenerator._load_locations: {e}")
-
-    def _on_lieu_changed(self, btn):
-        lid = self._lieu_group.id(btn)
-        self._selected_lieu_id = lid
-        self._selected_lieu_label = btn.text()
-        self._refresh_matiere_visibility()
-
-    def _refresh_matiere_visibility(self):
-        is_classroom = self._selected_lieu_id in self._classroom_lieu_ids
-        visible = self._student_classroom_label and is_classroom
-        self._matiere_group_widget.setVisible(visible)
-
-    def _update_source_label(self):
-        intranet_ok, _ = detect_network()
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        if intranet_ok and db.is_server_connected:
-            self._source_label.setText("Intranet")
-            self._source_label.setStyleSheet(f"color: {p.success}; font-size: {s(10)}px;")
-        else:
-            self._source_label.setText("Cloud")
-            self._source_label.setStyleSheet(f"color: {p.primary}; font-size: {s(10)}px;")
-
-    def _load_types_from_db(self):
-        conn = db.server_conn
-        if not conn:
-            return
-        try:
-            cur = conn.cursor()
-            cur.execute('''
-                SELECT idtypeevent, type_event,
-                       COALESCE("Event_Niveau2", '') AS niv2,
-                       COALESCE("Event_Niveau3", '') AS niv3
-                FROM larcauth_type_event
-                WHERE "Enabled" IS NOT FALSE
-                ORDER BY idtypeevent
-            ''')
-            self._type_hierarchy = {}
-            for _, cat, niv2, niv3 in cur.fetchall():
-                if cat not in self._type_hierarchy:
-                    self._type_hierarchy[cat] = {}
-                if niv2:
-                    if niv2 not in self._type_hierarchy[cat]:
-                        self._type_hierarchy[cat][niv2] = []
-                    if niv3:
-                        self._type_hierarchy[cat][niv2].append(niv3)
-        except Exception as e:
-            log(f"EventGenerator._load_types_from_db: {e}")
-            self._type_hierarchy = {}
-
-    def _on_cat_toggled(self, category: str):
-        self._selected_category = category
-        self._selected_niv2 = None
-        self._selected_type_path = category
-        self._populate_niv2(category)
-        self._update_selection()
-
-    def _populate_niv2(self, category: str):
-        self._clear_grid(self._niv2_grid)
-        niv2s = self._type_hierarchy.get(category, {})
-        if not niv2s:
-            self._type_stack.setCurrentIndex(0)
-            return
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        ncols = 3
-        for idx, niv2 in enumerate(niv2s):
-            btn = QPushButton(niv2)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(60)
-            btn.setStyleSheet(
-                f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
-                f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
-                f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
-                f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
-                f"QPushButton:checked {{ background: {p.primary_container}; "
-                f"border: 2px solid {p.primary}; }}"
-            )
-            btn.setCheckable(True)
-            btn.clicked.connect(lambda checked, n=niv2, c=category: self._on_niv2_clicked(n, c))
-            self._niv2_grid.addWidget(btn, idx // ncols, idx % ncols)
-        self._type_stack.setCurrentIndex(1)
-
-    def _on_niv2_clicked(self, niv2: str, category: str):
-        self._selected_niv2 = niv2
-        self._selected_type_path = f"{category} > {niv2}"
-        self._check_grid_button(self._niv2_grid, niv2)
-        niv3s = self._type_hierarchy.get(category, {}).get(niv2, [])
-        self._populate_niv3(niv3s)
-        self._update_selection()
-
-    def _populate_niv3(self, niv3s: list):
-        self._clear_grid(self._niv3_grid)
-        if not niv3s:
-            self._type_stack.setCurrentIndex(1)
-            return
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        for idx, niv3 in enumerate(niv3s):
-            btn = QPushButton(niv3)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(60)
-            btn.setStyleSheet(
-                f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
-                f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
-                f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
-                f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
-                f"QPushButton:checked {{ background: {p.tertiary_container}; "
-                f"border: 2px solid {p.tertiary}; }}"
-            )
-            btn.setCheckable(True)
-            btn.clicked.connect(lambda checked, n=niv3: self._on_niv3_clicked(n))
-            self._niv3_grid.addWidget(btn, 0, idx)
-        self._type_stack.setCurrentIndex(2)
-
-    def _on_niv3_clicked(self, niv3: str):
-        self._selected_type_path = f"{self._selected_category} > {self._selected_niv2} > {niv3}"
-        self._check_grid_button(self._niv3_grid, niv3)
-        self._update_selection()
-
-    def _clear_grid(self, grid: QGridLayout):
-        while grid.count():
-            w = grid.takeAt(0).widget()
-            if w: w.deleteLater()
-
-    def _check_grid_button(self, grid: QGridLayout, text: str):
-        for i in range(grid.count()):
-            w = grid.itemAt(i).widget()
-            if isinstance(w, QPushButton):
-                w.setChecked(w.text() == text)
-
-    def _update_selection(self):
-        if self._selected_type_path:
-            self._sel_btn.setText(f"✓ {self._selected_type_path}")
-        else:
-            self._sel_btn.setText("")
-
-    def _on_sel_clicked(self):
-        if not self._selected_type_path:
-            return
-        parts = self._selected_type_path.split(' > ')
-        depth = len(parts)
-        if depth == 1:
-            self._type_stack.setCurrentIndex(0)
-            self._cat_group.checkedButton().setChecked(False)
-            self._selected_category = None
-            self._selected_niv2 = None
-            self._selected_type_path = ''
-            self._update_selection()
-        elif depth == 2:
-            self._selected_niv2 = None
-            self._selected_type_path = parts[0]
-            self._populate_niv2(parts[0])
-            self._type_stack.setCurrentIndex(1)
-        elif depth == 3:
-            self._populate_niv2(parts[0])
-            self._on_niv2_clicked(parts[1], parts[0])
-            self._type_stack.setCurrentIndex(2)
-
-    def _validate(self):
-        if not self._selected_type_path:
-            QMessageBox.warning(self, "Erreur", "Sélectionnez un type d'événement.")
-            return
-        self.accept()
-
-    def get_data(self) -> dict:
-        dt = self._date_edit.dateTime()
-        dt.setTime(self._time_edit.time())
-        subj_id = self._subject_group.checkedId()
-        return {
-            'student_id': self._student_id,
-            'event_type': self._selected_type_path,
-            'event_at': dt.toString('yyyy-MM-dd HH:mm:ss'),
-            'classroom_id': self._student_classroom_id,
-            'classroom_label': self._student_classroom_label,
-            'lieu_id': self._selected_lieu_id,
-            'lieu_label': self._selected_lieu_label,
-            'subject_id': subj_id if subj_id >= 0 else None,
-            'subject_label': self._subject_group.checkedButton().text() if subj_id >= 0 else '',
-            'note': self._note_input.toPlainText().strip(),
-            'source': 'cloud' if not detect_network()[0] else 'intranet',
-        }
-
-
 # ---------------------------------------------------------------------------
 # Fenêtre principale
 # ---------------------------------------------------------------------------
@@ -888,13 +85,6 @@ class MainWindow(QWidget):
             QPushButton:pressed {{
                 background: {p.primary}; color: {p.on_primary};
             }}
-            QPushButton#today_btn {{
-                background: {p.primary}; color: {p.on_primary};
-                border: none; font-weight: bold;
-            }}
-            QPushButton#today_btn:hover {{
-                background: {p.primary};
-            }}
             QPushButton#theme_btn {{
                 background: transparent; border: none; font-size: 18px;
             }}
@@ -912,6 +102,20 @@ class MainWindow(QWidget):
             QPushButton#class_btn:checked {{
                 font-weight: bold;
             }}
+            QPushButton#period_btn {{
+                min-width: 89px; max-width: 89px; height: 34px;
+                font-size: {s(13)}px; font-weight: normal;
+                border: 2px solid transparent; border-radius: 4px;
+                padding: 0;
+                background: {p.surface_variant}; color: {p.text_strong};
+            }}
+            QPushButton#period_btn:hover {{
+                background: {p.primary_container}; border-color: {p.primary};
+            }}
+            QPushButton#period_btn:checked {{
+                background: {p.primary}; color: {p.on_primary};
+                border: 2px solid {p.primary}; font-weight: bold;
+            }}
         """
 
     def __init__(self):
@@ -921,12 +125,9 @@ class MainWindow(QWidget):
         self._current_class_label: str = ''
         self._selected_btn: QPushButton | None = None
         self._current_group_mode: str = ''  # 'pei', 'dp', 'etab', 'class'
-        self._current_date = QDate.currentDate()
-        self._current_period: str = 'day'  # day, week, month, term
-        self._current_term_id: int = 0
-        self._current_weekday: int = 0
         self._selected_student_id: int = 0
         self._students: list[dict] = []
+        self._time_manager = TimeManager()
         self._init_ui()
         self._load_initial_data()
         QTimer.singleShot(30000, self._refresh_timer)
@@ -937,67 +138,13 @@ class MainWindow(QWidget):
         outer.setContentsMargins(6, 6, 6, 6)
         outer.setSpacing(6)
 
-        # -- Top bar (minimal) ------------------------------------------------
-        top = QFrame()
-        top.setObjectName("top_bar")
-        top_layout = QHBoxLayout(top)
-        top_layout.setContentsMargins(10, 6, 10, 6)
-
-        self._date_label = QLabel()
-        self._date_label.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {theme_manager.palette.text_strong};")
-        self._time_label = QLabel()
-        self._time_label.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {theme_manager.palette.primary};")
-        self._update_datetime()
-
-        self._period_combo = QComboBox()
-        self._period_combo.addItem("Jour", 'day')
-        self._period_combo.addItem("Semaine", 'week')
-        self._period_combo.addItem("Mois", 'month')
-        self._period_combo.addItem("Trimestre", 'term')
-        self._period_combo.currentIndexChanged.connect(self._on_period_changed)
-
-        self._today_btn = QPushButton("Aujourd'hui")
-        self._today_btn.clicked.connect(self._go_today)
-        self._today_btn.setFixedWidth(100)
-
-        self._refresh_btn = QPushButton("⟳")
-        self._refresh_btn.setFixedWidth(36)
-        self._refresh_btn.clicked.connect(self.refresh_all)
-
-        self._theme_btn = QPushButton("🎨")
-        self._theme_btn.setObjectName("theme_btn")
-        self._theme_btn.setFixedWidth(36)
-        self._theme_menu = QMenu()
-        for key, label in theme_manager.names():
-            a = self._theme_menu.addAction(label)
-            a.setData(key)
-        self._theme_menu.triggered.connect(self._on_theme_selected)
-        self._theme_btn.setMenu(self._theme_menu)
-
-        self._network_label = QLabel()
-        self._update_network_label()
-
-        top_layout.addWidget(self._date_label)
-        top_layout.addWidget(self._time_label)
-        top_layout.addSpacing(20)
-        top_layout.addWidget(QLabel("Période :"))
-        top_layout.addWidget(self._period_combo)
-        top_layout.addSpacing(10)
-        top_layout.addWidget(self._today_btn)
-        top_layout.addWidget(self._refresh_btn)
-        top_layout.addWidget(self._theme_btn)
-        self._loading_label = QLabel()
-        self._loading_label.setStyleSheet(
-            f"font-size: 13px; color: {theme_manager.palette.primary}; font-weight: bold;")
-        self._loading_label.setVisible(False)
-        top_layout.addWidget(self._loading_label)
-        top_layout.addStretch()
-        top_layout.addWidget(self._network_label)
-
-        # -- Clock timer ------------------------------------------------------
-        self._clock_timer = QTimer()
-        self._clock_timer.timeout.connect(self._update_datetime)
-        self._clock_timer.start(10000)
+        # -- Top bar ------------------------------------------------------------
+        self._top_bar = TopBar(
+            on_period_click=self._on_period_clicked,
+            on_theme_change=self._on_theme_selected,
+            on_refresh=self.refresh_all,
+        )
+        outer.addWidget(self._top_bar)
 
         # -- Main area (sidebar + content) ------------------------------------
         main_h = QHBoxLayout()
@@ -1006,7 +153,7 @@ class MainWindow(QWidget):
         # Sidebar gauche
         self._sidebar = QFrame()
         self._sidebar.setObjectName("panel")
-        self._sidebar.setFixedWidth(260)
+        self._sidebar.setFixedWidth(233)
         self._sidebar_layout = QVBoxLayout(self._sidebar)
         self._sidebar_layout.setContentsMargins(6, 6, 6, 6)
         self._sidebar_layout.setSpacing(2)
@@ -1086,16 +233,6 @@ class MainWindow(QWidget):
         filter_row.addWidget(QLabel("Type:"))
         filter_row.addWidget(self._history_filter_type)
         filter_row.addSpacing(10)
-        self._history_filter_date_from = QDateEdit()
-        self._history_filter_date_from.setCalendarPopup(True)
-        self._history_filter_date_from.setDate(QDate.currentDate().addMonths(-1))
-        filter_row.addWidget(QLabel("Du:"))
-        filter_row.addWidget(self._history_filter_date_from)
-        self._history_filter_date_to = QDateEdit()
-        self._history_filter_date_to.setCalendarPopup(True)
-        self._history_filter_date_to.setDate(QDate.currentDate())
-        filter_row.addWidget(QLabel("Au:"))
-        filter_row.addWidget(self._history_filter_date_to)
         filter_btn = QPushButton("Filtrer")
         filter_btn.setCursor(Qt.PointingHandCursor)
         filter_btn.clicked.connect(lambda: self._load_global_history(self._current_group_mode))
@@ -1230,7 +367,6 @@ class MainWindow(QWidget):
         main_h.addWidget(self._sidebar)
         main_h.addWidget(self._content_stack, 1)
 
-        outer.addWidget(top)
         outer.addLayout(main_h)
         self.setLayout(outer)
 
@@ -1535,57 +671,17 @@ class MainWindow(QWidget):
 
     def _select_btn(self, btn: QPushButton | None):
         if self._selected_btn:
-            old_style = self._selected_btn.property('_normal_style') or ''
-            self._selected_btn.setStyleSheet(old_style)
+            self._selected_btn.setChecked(False)
         self._selected_btn = btn
         if btn:
-            btn.setProperty('_normal_style', btn.styleSheet())
-            ss = btn.styleSheet()
-            # Inverser fond/texte pour l'état sélectionné
-            for line in ss.split('}'):
-                if 'QPushButton' in line and 'QPushButton:hover' not in line:
-                    bg = re.search(r'background:\s*([^;]+)', line)
-                    fg = re.search(r'color:\s*([^;]+)', line)
-                    if bg and fg:
-                        btn.setStyleSheet(
-                            f"QPushButton {{ background: {fg.group(1)}; color: {bg.group(1)}; "
-                            f"border: 2px solid {fg.group(1)}; border-radius: 4px; "
-                            f"font-size: {theme_manager.font_size(10)}px; padding: 2px; }}"
-                            f"QPushButton:hover {{ background: {fg.group(1)}; color: white; }}"
-                        )
-                    break
-
-    def _update_datetime(self):
-        from datetime import datetime
-        now = datetime.now()
-        self._date_label.setText(now.strftime("%A %d %B %Y") + '  ')
-        self._time_label.setText(now.strftime("%H:%M") + '  ')
-
-    def _update_network_label(self):
-        intranet_ok, internet_ok = detect_network()
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        if intranet_ok:
-            self._network_label.setText("Intranet ●")
-            self._network_label.setStyleSheet(f"color: {p.success}; font-weight: bold; font-size: {s(12)}px;")
-        elif internet_ok:
-            self._network_label.setText("Cloud ●")
-            self._network_label.setStyleSheet(f"color: {p.primary}; font-weight: bold; font-size: {s(12)}px;")
-        else:
-            self._network_label.setText("Hors ligne")
-            self._network_label.setStyleSheet(f"color: {p.text_disabled}; font-size: {s(12)}px;")
-
-    def _set_loading(self, busy: bool, msg: str = "Chargement..."):
-        self._loading_label.setText("⟳ " + msg if busy else "")
-        self._loading_label.setVisible(busy)
-        QCoreApplication.processEvents()
+            btn.setChecked(True)
 
     def _load_initial_data(self):
-        self._set_loading(True, "Données initiales...")
+        self._top_bar.set_loading(True, "Données initiales...")
         conn = db.server_conn
         if not conn:
             QMessageBox.warning(self, "Erreur", "Non connecté au serveur.")
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
             return
 
         try:
@@ -1598,7 +694,7 @@ class MainWindow(QWidget):
                 LIMIT 1
             """)
             r = cur.fetchone()
-            self._current_term_id = int(r[0]) if r else 0
+            self._time_manager.term_id = int(r[0]) if r else 0
 
             # Programmes (PEI, DP, ...)
             cur.execute("SELECT id, sigle, label FROM larcauth_program ORDER BY sigle")
@@ -1615,53 +711,55 @@ class MainWindow(QWidget):
             """)
             self._classes = cur.fetchall()
 
+            # Unités de période
+            from LarcSuperviseur.views.core.data_loader import DataLoader
+            self._time_manager.unit_periods = DataLoader().get_unit_periods()
+            self._top_bar.set_unit_periods(self._time_manager.unit_periods)
+
             # Construire la sidebar
             self._build_sidebar()
 
             # Activer le mode groupe par défaut
             self._on_all_clicked()
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
 
         except Exception as e:
             log(f"_load_initial_data: {e}")
             QMessageBox.critical(self, "Erreur", str(e))
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
 
-    def _on_period_changed(self, idx: int):
-        if idx < 0:
-            return
-        self._current_period = self._period_combo.itemData(idx)
+    def _on_period_clicked(self, key: str):
+        self._time_manager.select_period(key)
         self.refresh_all()
 
-    def _on_theme_selected(self, action):
-        key = action.data()
-        if key:
-            theme_manager.set_active(key)
-            self.setStyleSheet(self._STYLE)
-            # Reconstruire les composants qui ont des couleurs inline
-            self._build_sidebar()
-            self._rebuild_student_detail_theme()
-            self._update_network_label()
-            if self._current_group_mode:
-                self.refresh_all()
+    def _on_theme_selected(self, key: str):
+        theme_manager.set_active(key)
+        self.setStyleSheet(self._STYLE)
+        self._top_bar.restyle()
+        self._build_sidebar()
+        self._rebuild_student_detail_theme()
+        self._top_bar.update_network()
+        if self._current_group_mode:
+            self.refresh_all()
 
     # ---- Mode groupe -------------------------------------------------------
 
     def _show_group_mode(self, mode: str):
         self._content_stack.setCurrentIndex(0)
         self._group_scroll.verticalScrollBar().setValue(0)
+        self._top_bar.show_period_row(True)
         self._load_group_stats(mode)
         self._load_global_history(mode)
 
     def _load_group_stats(self, mode: str):
-        self._set_loading(True, "Statistiques...")
+        self._top_bar.set_loading(True, "Statistiques...")
         conn = db.server_conn
-        if not conn or not self._current_term_id:
-            self._set_loading(False)
+        if not conn or not self._time_manager.term_id:
+            self._top_bar.set_loading(False)
             return
 
         p = theme_manager.palette
-        date_from, date_to = self._period_dates()
+        date_from, date_to = self._time_manager.period_dates()
 
         try:
             cur = conn.cursor()
@@ -1886,17 +984,17 @@ class MainWindow(QWidget):
             else:
                 self._donut_chart.setTitle("Taux de présence — aucune donnée")
 
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
 
         except Exception as e:
             log(f"_load_group_stats: {e}")
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
 
     def _load_global_history(self, mode: str):
-        self._set_loading(True, "Événements...")
+        self._top_bar.set_loading(True, "Événements...")
         conn = db.server_conn
-        if not conn or not self._current_term_id:
-            self._set_loading(False)
+        if not conn or not self._time_manager.term_id:
+            self._top_bar.set_loading(False)
             return
 
         try:
@@ -1917,7 +1015,10 @@ class MainWindow(QWidget):
             if self._history_filter_type.count() == 0:
                 cur.execute("SELECT DISTINCT event_type FROM student_event ORDER BY event_type")
                 for (et,) in cur.fetchall():
-                    self._history_filter_type.addItem(et)
+                    if et.lower() not in ('absence', 'exit', 'arrival', 'departure', 'return', 'late', 'justified'):
+                        self._history_filter_type.addItem(et)
+                self._history_filter_type.setCurrentIndex(-1)
+                self._history_filter_type.lineEdit().setText("")
 
             if mode == 'grp_all':
                 class_filter = "AND p.sigle IN ('PEI', 'MYP', 'DPEn', 'DPFr')"
@@ -1933,8 +1034,7 @@ class MainWindow(QWidget):
             params = []
             sel_class = self._history_filter_class.currentData()
             sel_type = self._history_filter_type.currentText().strip()
-            date_from = self._history_filter_date_from.date().toString('yyyy-MM-dd')
-            date_to = self._history_filter_date_to.date().toString('yyyy-MM-dd')
+            date_from, date_to = self._time_manager.period_dates()
 
             if sel_class:
                 class_filter += " AND c.id = %s"
@@ -1971,8 +1071,8 @@ class MainWindow(QWidget):
 
             for i, row in enumerate(rows):
                 eid, name, cls_name, etype, e_at, lieu, subject, note, creator, validated = row
-                ei = _event_icon(etype)
-                color = _event_color(etype)
+                ei = event_icon(etype)
+                color = event_color(etype)
                 display_type = f"{ei} {etype}"
 
                 items = [
@@ -2008,30 +1108,31 @@ class MainWindow(QWidget):
             hh.setSectionResizeMode(7, QHeaderView.Stretch)
             hh.setSectionResizeMode(8, QHeaderView.Interactive); self._history_table.setColumnWidth(8, 200)
             hh.setSectionResizeMode(9, QHeaderView.Interactive); self._history_table.setColumnWidth(9, 130)
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
 
         except Exception as e:
             log(f"_load_global_history: {e}")
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
 
     # ---- Mode classe -------------------------------------------------------
 
     def _show_class_mode(self, class_id: int):
         self._content_stack.setCurrentIndex(1)
         self._class_stack.setCurrentIndex(0)
+        self._top_bar.show_period_row(False)
 
         self._cards_title.setText(f"<b>Élèves de {self._current_class_label}</b>")
         self._load_students(class_id)
         self._selected_student_id = 0
 
     def _load_students(self, class_id: int):
-        self._set_loading(True, "Élèves...")
+        self._top_bar.set_loading(True, "Élèves...")
         conn = db.server_conn
-        if not conn or not self._current_term_id:
-            self._set_loading(False)
+        if not conn or not self._time_manager.term_id:
+            self._top_bar.set_loading(False)
             return
 
-        date_from, date_to = self._period_dates()
+        date_from, date_to = self._time_manager.period_dates()
 
         try:
             cur = conn.cursor()
@@ -2099,14 +1200,15 @@ class MainWindow(QWidget):
                     spacer = QWidget()
                     spacer.setFixedSize(124, 200)
                     self._cards_layout.addWidget(spacer, len(self._students) // cols, cols - remaining + _, Qt.AlignCenter)
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
 
         except Exception as e:
             log(f"_load_students: {e}")
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
 
     def _on_student_selected(self, student_id: int):
         self._selected_student_id = student_id
+        self._top_bar.show_period_row(True)
         self._load_student_detail(student_id)
 
     def _on_edit_timetable(self):
@@ -2118,13 +1220,14 @@ class MainWindow(QWidget):
             if cid == self._current_class_id:
                 label = l
                 break
-        dlg = TimetableEditor(self._current_class_id, label, self._current_term_id, self)
+        dlg = TimetableEditor(self._current_class_id, label, self._time_manager.term_id, self)
         dlg.exec()
 
     def _on_back_to_cards(self):
         self._sd_tabs.hide()
         self._sd_placeholder.show()
         self._class_stack.setCurrentIndex(0)
+        self._top_bar.show_period_row(False)
 
     def _on_add_event(self):
         sid = self._selected_student_id
@@ -2137,7 +1240,7 @@ class MainWindow(QWidget):
             if not conn:
                 QMessageBox.warning(self, "Erreur", "Aucune connexion base de données.")
                 return
-            self._set_loading(True, "Enregistrement...")
+            self._top_bar.set_loading(True, "Enregistrement...")
             try:
                 cur = conn.cursor()
                 cur.execute(
@@ -2148,24 +1251,24 @@ class MainWindow(QWidget):
                      data['note'], data['source'], session.user_id)
                 )
                 conn.commit()
-                self._set_loading(False)
+                self._top_bar.set_loading(False)
             except Exception as e:
                 log(f"_on_add_event insert: {e}")
-                self._set_loading(False)
+                self._top_bar.set_loading(False)
                 conn.rollback()
                 QMessageBox.critical(self, "Erreur", f"Échec de l'enregistrement : {e}")
                 return
             self._load_student_detail(sid)
 
     def _load_student_detail(self, student_id: int):
-        self._set_loading(True, "Détail élève...")
+        self._top_bar.set_loading(True, "Détail élève...")
         conn = db.server_conn
         if not conn or not self._current_class_id:
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
             return
 
         p = theme_manager.palette
-        date_from, date_to = self._period_dates()
+        date_from, date_to = self._time_manager.period_dates()
 
         try:
             cur = conn.cursor()
@@ -2285,8 +1388,8 @@ class MainWindow(QWidget):
             self._sd_events.setHorizontalHeaderLabels(["ID", "Type", "Lieu", "Matière", "Date", "Note", "Créé par", "Validé"])
             self._sd_events.setColumnHidden(0, True)
             for i, (eid, etype, e_at, lieu, subject, note, creator, validated) in enumerate(evts):
-                ei = _event_icon(etype)
-                color = _event_color(etype)
+                ei = event_icon(etype)
+                color = event_color(etype)
                 items = [
                     QTableWidgetItem(str(eid)),
                     QTableWidgetItem(f"{ei} {etype}"),
@@ -2317,31 +1420,13 @@ class MainWindow(QWidget):
             self._sd_tabs.show()
             self._sd_placeholder.hide()
             self._class_stack.setCurrentIndex(1)
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
 
         except Exception as e:
             log(f"_load_student_detail: {e}")
-            self._set_loading(False)
+            self._top_bar.set_loading(False)
 
     # ---- Utilitaires -------------------------------------------------------
-
-    def _period_dates(self) -> tuple[str, str]:
-        today = QDate.currentDate()
-        if self._current_period == 'day':
-            d = self._current_date.toString('yyyy-MM-dd')
-            return d, d
-        elif self._current_period == 'week':
-            start = today.addDays(-(today.dayOfWeek() - 1))
-            end = start.addDays(6)
-            return start.toString('yyyy-MM-dd'), end.toString('yyyy-MM-dd')
-        elif self._current_period == 'month':
-            start = QDate(today.year(), today.month(), 1)
-            end = QDate(today.year(), today.month(), today.daysInMonth())
-            return start.toString('yyyy-MM-dd'), end.toString('yyyy-MM-dd')
-        else:  # term
-            # Trimestre = 3 mois glissants
-            start = today.addMonths(-3)
-            return start.toString('yyyy-MM-dd'), today.toString('yyyy-MM-dd')
 
     def _get_event_id_from_table(self, table: QTableWidget) -> int | None:
         idx = table.currentRow()
@@ -2493,14 +1578,14 @@ class MainWindow(QWidget):
             QMessageBox.critical(self, "Erreur", f"Échec de la suppression : {e}")
 
     def refresh_all(self):
-        self._update_network_label()
+        self._top_bar.update_network()
         if self._current_group_mode == 'class':
             self._show_class_mode(self._current_class_id)
         elif self._current_group_mode:
             self._show_group_mode(self._current_group_mode)
 
     def _refresh_timer(self):
-        self._update_network_label()
+        self._top_bar.update_network()
         QTimer.singleShot(30000, self._refresh_timer)
 
     def resizeEvent(self, event):
@@ -2535,187 +1620,4 @@ class MainWindow(QWidget):
 
 
 # ---------------------------------------------------------------------------
-# Éditeur d'emploi du temps
-# ---------------------------------------------------------------------------
-class TimetableEditor(QDialog):
-    DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi']
-
-    def __init__(self, class_id: int, class_label: str, term_id: int, parent=None):
-        super().__init__(parent)
-        self._class_id = class_id
-        self._term_id = term_id
-        self.setWindowTitle(f"Emploi du temps — {class_label}")
-        self.setMinimumSize(800, 500)
-        self._init_ui()
-        self._load_data()
-
-    def _init_ui(self):
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        layout = QVBoxLayout(self)
-
-        # Grille
-        self._tt_grid = QTableWidget()
-        self._tt_grid.setAlternatingRowColors(True)
-        self._tt_grid.horizontalHeader().setStretchLastSection(True)
-        self._tt_grid.setEditTriggers(QTableWidget.NoEditTriggers)
-        layout.addWidget(self._tt_grid, 1)
-
-        # Boutons
-        btn_row = QHBoxLayout()
-        save_btn = QPushButton("💾 Enregistrer")
-        save_btn.setMinimumHeight(36)
-        save_btn.setStyleSheet(
-            f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
-            f"border: none; border-radius: 6px; font-weight: bold; "
-            f"font-size: {s(12)}px; padding: 6px 20px; }}"
-            f"QPushButton:hover {{ background: {p.active}; }}")
-        save_btn.clicked.connect(self._save)
-        btn_row.addStretch()
-        btn_row.addWidget(save_btn)
-        layout.addLayout(btn_row)
-
-    def _load_data(self):
-        conn = db.server_conn
-        if not conn:
-            return
-
-        try:
-            cur = conn.cursor()
-
-            # Tous les timeperiods triés par weekday, debut
-            cur.execute("""
-                SELECT id, debut, fin, weekday
-                FROM larcauth_timeperiod
-                WHERE enabled = TRUE
-                ORDER BY weekday, debut
-            """)
-            all_tps = cur.fetchall()
-
-            # Regrouper par jour
-            from collections import defaultdict
-            self._tp_by_day: dict[int, list[tuple]] = defaultdict(list)
-            for tp_id, debut, fin, wd in all_tps:
-                self._tp_by_day[wd].append((tp_id, debut, fin))
-
-            # classroom_has_timeperiod pour cette classe et ce term
-            cur.execute("""
-                SELECT cht.id, cht.fk_timeperiod, cht.fk_weekday,
-                       coalesce(cht.s_classroom_termsubject, cht.ref_classroom_termsubject, '')
-                FROM classroom_has_timeperiod cht
-                WHERE cht.fk_classroom = %s AND cht.fk_term = %s
-            """, (self._class_id, self._term_id))
-            existing = cur.fetchall()
-            # Map: (weekday, tp_id) → subject
-            self._cht_map: dict[tuple[int, int], str] = {}
-            self._cht_id_map: dict[tuple[int, int], str] = {}  # (wd, tp) → cht.id
-            for cht_id, tp_id, wd, subj in existing:
-                self._cht_map[(wd, tp_id)] = subj
-                self._cht_id_map[(wd, tp_id)] = cht_id
-
-            # Matières disponibles pour cette classe
-            cur.execute("""
-                SELECT DISTINCT sub.label
-                FROM classroom_has_timeperiod cht
-                JOIN larcauth_subject sub ON sub.id = cht.ref_classroom_termsubject
-                WHERE cht.fk_classroom = %s AND cht.ref_classroom_termsubject IS NOT NULL
-                ORDER BY sub.label
-            """, (self._class_id,))
-            self._subjects = [''] + [r[0] for r in cur.fetchall()]
-
-            # Construire la grille
-            self._build_grid()
-
-        except Exception as e:
-            log(f"TimetableEditor._load_data: {e}")
-            QMessageBox.critical(self, "Erreur", str(e))
-
-    def _build_grid(self):
-        p = theme_manager.palette
-
-        # Déterminer le nombre max de créneaux par jour
-        max_slots = max(len(v) for v in self._tp_by_day.values()) if self._tp_by_day else 0
-
-        self._tt_grid.setColumnCount(6)  # Heure + 5 jours
-        self._tt_grid.setHorizontalHeaderLabels(['Heure'] + self.DAYS)
-        self._tt_grid.setRowCount(max_slots)
-
-        # Stocker les combos pour la sauvegarde
-        self._cell_combos: dict[tuple[int, int], QComboBox] = {}  # (row, day)
-
-        for row in range(max_slots):
-            for day_idx in range(1, 6):  # 1=Lundi ... 5=Vendredi
-                tp_list = self._tp_by_day.get(day_idx, [])
-                if row < len(tp_list):
-                    tp_id, debut, fin = tp_list[row]
-                    debut_str = debut.strftime('%H:%M') if debut else ''
-                    fin_str = fin.strftime('%H:%M') if fin else ''
-                    time_label = f"{debut_str}-{fin_str}"
-
-                    # Colonne Heure (col 0)
-                    if day_idx == 1:
-                        time_item = QTableWidgetItem(time_label)
-                        time_item.setFlags(time_item.flags() & ~Qt.ItemIsEditable)
-                        self._tt_grid.setItem(row, 0, time_item)
-
-                    # Combo matière
-                    combo = QComboBox()
-                    combo.addItems(self._subjects)
-                    current_subj = self._cht_map.get((day_idx, tp_id), '')
-                    idx = combo.findText(current_subj)
-                    if idx >= 0:
-                        combo.setCurrentIndex(idx)
-                    # Stocker tp_id et cht_id dans le combo
-                    combo.setProperty('tp_id', tp_id)
-                    combo.setProperty('cht_id', self._cht_id_map.get((day_idx, tp_id), ''))
-                    combo.setProperty('day', day_idx)
-                    self._cell_combos[(row, day_idx)] = combo
-                    self._tt_grid.setCellWidget(row, day_idx, combo)
-
-        self._tt_grid.resizeColumnsToContents()
-        self._tt_grid.setColumnWidth(0, 80)
-        for c in range(1, 6):
-            self._tt_grid.setColumnWidth(c, 140)
-
-    def _save(self):
-        conn = db.server_conn
-        if not conn:
-            return
-
-        p = theme_manager.palette
-        try:
-            cur = conn.cursor()
-            updated = 0
-
-            for (row, day), combo in self._cell_combos.items():
-                tp_id = combo.property('tp_id')
-                cht_id = combo.property('cht_id')
-                subj = combo.currentText().strip()
-
-                if not cht_id:
-                    continue  # ligne classroom_has_timeperiod manquante
-
-                # Trouver l'id matière
-                cur.execute("SELECT id FROM larcauth_subject WHERE label = %s", (subj,))
-                r = cur.fetchone()
-                subj_id = r[0] if r else None
-
-                if subj_id:
-                    cur.execute(
-                        "UPDATE classroom_has_timeperiod SET ref_classroom_termsubject = %s WHERE id = %s",
-                        (subj_id, cht_id))
-                    updated += cur.rowcount
-                else:
-                    cur.execute(
-                        "UPDATE classroom_has_timeperiod SET ref_classroom_termsubject = NULL WHERE id = %s",
-                        (cht_id,))
-                    updated += cur.rowcount
-
-            conn.commit()
-            QMessageBox.information(self, "Succès", f"{updated} créneau(x) mis à jour.")
-            self.accept()
-
-        except Exception as e:
-            log(f"TimetableEditor._save: {e}")
-            conn.rollback()
             QMessageBox.critical(self, "Erreur", str(e))

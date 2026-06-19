@@ -1,12 +1,10 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QTextEdit, QMessageBox, QTableWidget,
+    QComboBox, QTextEdit, QMessageBox,
 )
 from PySide6.QtCore import Qt
 
 from LarcSuperviseur.common.database import db
-from LarcSuperviseur.common.session import session
-from LarcSuperviseur.common.logger import log
 from LarcSuperviseur.common.theme import theme_manager
 
 
