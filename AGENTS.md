@@ -81,6 +81,21 @@ Columns: `type_supervisor`, `type_coordonator`, `is_adm`.
 
 ## Next
 
-- Ajouter types « Absence justifiée > Maladie/Accident/Vacances » dans la DB
+- Ajouter types « Absence justifiée > Maladie/Accident/Vacances » dans la DB (FAIT)
 - Remplir l'emploi du temps T3
 - Interface mobile Flutter (phase ultérieure)
+
+## Notes pour le 23 juin
+
+### Stats absences à corriger
+Les types d'absence ont changé (nouveaux codes type_event : `Absence > Maladie`, etc.).
+Les requêtes ILIKE dans `_load_group_stats`, `_load_students`, `_load_global_history`, `_load_student_detail` utilisent encore les anciens patterns :
+```sql
+se.event_type ILIKE '%absence%'           -- ancien mot-clé
+se.event_type ILIKE 'Suivi > Absence%'    -- ancien chemin
+```
+**Ajouter** `se.event_type ILIKE 'Absence%'` dans toutes ces requêtes.
+
+### Liste des absents
+- Trouver un emplacement pour une **liste des absents par classe** dans la vue groupe
+- Quand on clique sur une classe, afficher une **liste claire des absents** (pas seulement le compteur)
