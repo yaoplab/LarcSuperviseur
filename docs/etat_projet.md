@@ -1,6 +1,6 @@
 # État du Projet — LarcSuperviseur
 
-_Audit du 3 juin 2026 — Dernière mise à jour : 10 juin 2026_
+_Audit du 3 juin 2026 — Dernière mise à jour : 22 juin 2026_
 
 ## 1. Verdict Global
 
@@ -53,6 +53,14 @@ _Audit du 3 juin 2026 — Dernière mise à jour : 10 juin 2026_
 3. Adapter l'app pour PP et PYP si besoin
 4. Interface mobile Flutter (phase ultérieure)
 5. Page web admin pour consultation depuis l'extérieur (phase ultérieure)
+
+## 5b. Nouveau (22 juin 2026)
+
+- Migration `common/` → `larccommon` (LarcCommon) via modules passerelle
+- Intégration PhiBuilder dans ThemeManager (QSS Material Design 3 pour 16 widgets)
+- 5 thèmes au lieu de 3 : Océan, Forêt, Nuit, Lave, Sable (+ vignettes colorées)
+- Module de traduction l10n disponible (fr/en)
+- Voir `docs/06_larccommon.md` pour les détails
 
 ## 6. Documentation
 

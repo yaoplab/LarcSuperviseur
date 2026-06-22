@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QMenu, QButtonGroup,
 )
 from PySide6.QtCore import QTimer, QCoreApplication
+from PySide6.QtGui import QPixmap, QPainter, QColor, QIcon
 
 from LarcSuperviseur.common.theme import theme_manager
 from LarcSuperviseur.common.session import session
@@ -61,6 +62,11 @@ class TopBar(QFrame):
         for key, label in theme_manager.names():
             a = self._theme_menu.addAction(label)
             a.setData(key)
+            pal = theme_manager.get_palette(key)
+            if pal:
+                pm = QPixmap(16, 16)
+                pm.fill(QColor(pal.primary))
+                a.setIcon(QIcon(pm))
         self._theme_menu.triggered.connect(self._on_theme_triggered)
         self._theme_btn.setMenu(self._theme_menu)
         row1.addWidget(self._theme_btn)

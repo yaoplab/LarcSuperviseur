@@ -1,6 +1,7 @@
 import sys, os
 sys.path.insert(0, 'C:\\Projets\\eLarcProfPy')
-from common.database import db
+sys.path.insert(0, 'C:\\Projets\\LarcCommon')
+from larccommon.database import db
 
 if not db.connect_intranet():
     print("ERREUR : connexion Intranet impossible")
