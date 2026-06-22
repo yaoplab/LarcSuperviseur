@@ -20,6 +20,8 @@ from LarcSuperviseur.common.theme import theme_manager
 from LarcSuperviseur.common.photos import get_photo_path
 from LarcSuperviseur.views.core.time_manager import TimeManager
 from LarcSuperviseur.views.top_bar import TopBar
+from LarcSuperviseur.views.core.cardsList.config import CARD_THEMES
+from LarcSuperviseur.common.trace import trace
 
 
 from LarcSuperviseur.common.event_helpers import event_icon, event_color
@@ -120,16 +122,22 @@ class MainWindow(QWidget):
 
     def __init__(self):
         super().__init__()
+        trace(f" MainWindow.__init__: démarre")
         self.setWindowTitle(f"LarcSuperviseur — {session.full_name} ({session.role.value})")
         self._current_class_id: int = 0
         self._current_class_label: str = ''
         self._selected_btn: QPushButton | None = None
         self._current_group_mode: str = ''  # 'pei', 'dp', 'etab', 'class'
+        self._current_weekday: int = 0
         self._selected_student_id: int = 0
         self._students: list[dict] = []
+        self._classes: list = []
+        self._programs: dict = {}
         self._time_manager = TimeManager()
         self._init_ui()
+        trace(f" MainWindow.__init__: _init_ui OK, appel _load_initial_data")
         self._load_initial_data()
+        trace(f" MainWindow.__init__: _load_initial_data terminé")
         QTimer.singleShot(30000, self._refresh_timer)
 
     def _init_ui(self):
@@ -338,6 +346,27 @@ class MainWindow(QWidget):
         self._cards_title.setObjectName("panel_title")
         header_row.addWidget(self._cards_title)
         header_row.addStretch()
+        # Boutons thèmes Phi
+        self._phi_group = QButtonGroup(self)
+        self._phi_group.setExclusive(True)
+        self._card_theme: str = 'medium'
+        for key, label in [('compact', '▱'), ('medium', '▰'), ('large', '▣')]:
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setFixedSize(34, 34)
+            btn.setToolTip(f"Phi {key.capitalize()}")
+            btn.setStyleSheet(
+                f"QPushButton {{ font-size: 16px; border: 1px solid {theme_manager.palette.outline_variant}; "
+                f"border-radius: 4px; background: {theme_manager.palette.surface_variant}; "
+                f"color: {theme_manager.palette.text_strong}; }}"
+                f"QPushButton:checked {{ background: {theme_manager.palette.primary}; "
+                f"color: {theme_manager.palette.on_primary}; border: 2px solid {theme_manager.palette.primary}; }}"
+            )
+            self._phi_group.addButton(btn)
+            btn.clicked.connect(lambda checked, k=key: self._on_card_theme(k))
+            if key == 'medium':
+                btn.setChecked(True)
+            header_row.addWidget(btn)
         self._tt_edit_btn = QPushButton("🕐 Emploi du temps")
         self._tt_edit_btn.setStyleSheet(
             f"QPushButton {{ background: {theme_manager.palette.surface_variant}; "
@@ -422,23 +451,28 @@ class MainWindow(QWidget):
         self._sd_photo.setAlignment(Qt.AlignCenter)
         contact_row.addWidget(self._sd_photo)
 
-        info_col = QVBoxLayout()
-        info_col.setSpacing(2)
+        info_col = QGridLayout()
+        info_col.setSpacing(8)
+        info_col.setColumnStretch(0, 0)
+        info_col.setColumnStretch(1, 1)
         self._sd_contact_labels = {}
-        for key, lbl in [
+        for i, (key, lbl) in enumerate([
             ('full_name', 'Nom'),
             ('email', 'Email'),
             ('email_perso', 'Email personnel'),
             ('tel_maison', 'Téléphone maison'),
             ('tel_portable', 'Téléphone portable'),
             ('date_entree', "Date d'entrée"),
-        ]:
+        ]):
+            label = QLabel(f"<b>{lbl} :</b>")
+            label.setStyleSheet(f"font-size: {s(13)}px; color: {p.text_strong};")
             w = QLabel()
-            w.setStyleSheet(f"font-size: {s(12)}px; color: {p.text_soft};")
+            w.setStyleSheet(f"font-size: {s(13)}px; color: {p.text_soft}; padding-left: 8px;")
             w.setWordWrap(True)
             self._sd_contact_labels[key] = w
-            info_col.addWidget(w)
-        info_col.addStretch()
+            info_col.addWidget(label, i, 0, Qt.AlignLeft)
+            info_col.addWidget(w, i, 1, Qt.AlignLeft)
+        info_col.setRowStretch(len([1,2,3,4,5,6]), 1)
         contact_row.addLayout(info_col, 1)
 
         self._sd_add_btn = QPushButton("➕")
@@ -569,6 +603,7 @@ class MainWindow(QWidget):
         for cid, label, pid, sigle in self._classes:
             if sigle in groups:
                 groups[sigle].append((cid, label))
+        trace(f" _build_sidebar: classes={len(self._classes)}, groups={ {k:len(v) for k,v in groups.items()} }")
 
         def _make_btn(ss, min_h=32):
             b = QPushButton()
@@ -588,9 +623,9 @@ class MainWindow(QWidget):
             sec_hdr = _make_btn(
                 f"QPushButton {{ background: transparent; color: {p.text_strong}; "
                 f"border: none; border-bottom: 2px solid {p.outline_variant}; "
-                f"font-weight: bold; font-size: {s(12)}px; text-align: left; padding: 4px 2px; }}"
+                f"font-weight: bold; font-size: {s(13)}px; text-align: left; padding: 4px 2px; }}"
                 f"QPushButton:hover {{ color: {p.primary}; border-bottom: 2px solid {p.primary}; }}",
-                min_h=28
+                min_h=34
             )
             sec_hdr.setText(sec_name)
             sec_hdr.clicked.connect(lambda checked, sn=sec_name: self._on_section_clicked(sn))
@@ -598,7 +633,7 @@ class MainWindow(QWidget):
 
             # Mini-grille 2 colonnes pour cette section
             grd = QGridLayout()
-            grd.setSpacing(2)
+            grd.setSpacing(8)
 
             for col_idx, (hdr_text, prog_key) in enumerate(columns):
                 fg, bg, on_fg, _ = prog_style[prog_key]
@@ -606,9 +641,9 @@ class MainWindow(QWidget):
 
                 col_hdr = _make_btn(
                     f"QPushButton {{ background: {fg}; color: {on_fg}; border: none; "
-                    f"border-radius: 4px; font-weight: bold; font-size: {s(10)}px; padding: 3px; }}"
+                    f"border-radius: 4px; font-weight: bold; font-size: {s(13)}px; padding: 3px; }}"
                     f"QPushButton:hover {{ opacity: 0.8; }}",
-                    min_h=26
+                    min_h=21
                 )
                 col_hdr.setText(hdr_text)
                 col_hdr.clicked.connect(lambda checked, pk=prog_key: self._on_prog_clicked(pk))
@@ -617,28 +652,29 @@ class MainWindow(QWidget):
                 for i, (cid, label) in enumerate(items):
                     btn = _make_btn(
                         f"QPushButton {{ background: {bg}; color: {fg}; border: none; "
-                        f"border-radius: 4px; font-size: {s(10)}px; padding: 2px; }}"
+                        f"border-radius: 4px; font-size: {s(13)}px; padding: 2px; }}"
                         f"QPushButton:hover {{ background: {fg}; color: {bg}; }}",
-                        min_h=32
+                        min_h=34
                     )
                     btn.setText(label)
                     btn.clicked.connect(lambda checked, c=cid, l=label, b=btn: self._on_class_clicked(c, l, b))
                     grd.addWidget(btn, i + 1, col_idx)
 
             layout.addLayout(grd)
-            layout.addSpacing(4)
+            layout.addSpacing(8)
 
         # Toutes les classes
         self._all_btn = _make_btn(
             f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
-            f"border: none; border-radius: 6px; font-weight: bold; font-size: {s(11)}px; }}"
+            f"border: none; border-radius: 6px; font-weight: bold; font-size: {s(21)}px; }}"
             f"QPushButton:hover {{ background: {p.active}; }}",
-            min_h=36
+            min_h=55
         )
-        self._all_btn.setText("📊 Toutes les classes")
+        self._all_btn.setText("Toutes les classes")
         self._all_btn.clicked.connect(self._on_all_clicked)
         layout.addWidget(self._all_btn)
         layout.addStretch()
+        trace(f" _build_sidebar: terminé")
 
     def _on_section_clicked(self, section: str):
         mode_map = {'Collège': 'grp_college', 'Lycée': 'grp_lycee'}
@@ -667,7 +703,9 @@ class MainWindow(QWidget):
         self._current_class_id = 0
         self._current_class_label = ''
         self._select_btn(None)
+        trace(f" _on_all_clicked: lance _show_group_mode(grp_all)")
         self._show_group_mode('grp_all')
+        trace(f" _on_all_clicked: terminé")
 
     def _select_btn(self, btn: QPushButton | None):
         if self._selected_btn:
@@ -678,7 +716,9 @@ class MainWindow(QWidget):
 
     def _load_initial_data(self):
         self._top_bar.set_loading(True, "Données initiales...")
+        trace(f" _load_initial_data: démarre")
         conn = db.server_conn
+        trace(f" _load_initial_data: server_conn={conn is not None}")
         if not conn:
             QMessageBox.warning(self, "Erreur", "Non connecté au serveur.")
             self._top_bar.set_loading(False)
@@ -687,18 +727,24 @@ class MainWindow(QWidget):
         try:
             cur = conn.cursor()
 
-            # Terme actif (en fonction de la date courante)
+            # Terme actif (via academicyear, pas les dates)
             cur.execute("""
-                SELECT id FROM larcauth_term
-                WHERE start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE
+                SELECT t.id, t.label FROM larcauth_term t, larcauth_academicyear ay
+                WHERE ay.s_id = 1 AND t.trim = ay.current_term_number
                 LIMIT 1
             """)
             r = cur.fetchone()
-            self._time_manager.term_id = int(r[0]) if r else 0
+            if r:
+                self._time_manager.term_id = int(r[0])
+                self._time_manager.term_label = r[1]
+            else:
+                self._time_manager.term_id = 0
+                self._time_manager.term_label = ''
 
             # Programmes (PEI, DP, ...)
             cur.execute("SELECT id, sigle, label FROM larcauth_program ORDER BY sigle")
             self._programs = {r[0]: {'sigle': r[1], 'label': r[2]} for r in cur.fetchall()}
+            trace(f" _load_initial_data: {len(self._programs)} programmes chargés")
 
             # Classes avec leur programme via level (Collège + Lycée uniquement)
             cur.execute("""
@@ -710,6 +756,7 @@ class MainWindow(QWidget):
                 ORDER BY p.sigle, c.label
             """)
             self._classes = cur.fetchall()
+            trace(f" _load_initial_data: {len(self._classes)} classes chargées")
 
             # Unités de période
             from LarcSuperviseur.views.core.data_loader import DataLoader
@@ -717,7 +764,9 @@ class MainWindow(QWidget):
             self._top_bar.set_unit_periods(self._time_manager.unit_periods)
 
             # Construire la sidebar
+            trace(f" _load_initial_data: construction sidebar")
             self._build_sidebar()
+            trace(f" _load_initial_data: sidebar construite")
 
             # Activer le mode groupe par défaut
             self._on_all_clicked()
@@ -748,12 +797,15 @@ class MainWindow(QWidget):
         self._content_stack.setCurrentIndex(0)
         self._group_scroll.verticalScrollBar().setValue(0)
         self._top_bar.show_period_row(True)
+        trace(f" _show_group_mode({mode}): chargement stats + historique")
         self._load_group_stats(mode)
         self._load_global_history(mode)
+        trace(f" _show_group_mode({mode}): terminé")
 
     def _load_group_stats(self, mode: str):
         self._top_bar.set_loading(True, "Statistiques...")
         conn = db.server_conn
+        trace(f" _load_group_stats: mode={mode}, server_conn={conn is not None}, term_id={self._time_manager.term_id}")
         if not conn or not self._time_manager.term_id:
             self._top_bar.set_loading(False)
             return
@@ -1132,7 +1184,7 @@ class MainWindow(QWidget):
             self._top_bar.set_loading(False)
             return
 
-        date_from, date_to = self._time_manager.period_dates()
+        today = QDate.currentDate().toString('yyyy-MM-dd')
 
         try:
             cur = conn.cursor()
@@ -1162,9 +1214,9 @@ class MainWindow(QWidget):
                                    AND se.validated_by IS NULL) > 0 THEN 'Absent' ELSE 'Présent' END AS presence
                         FROM student_event se
                         WHERE se.student_id IN ({ids_sql})
-                          AND DATE(se.event_at) BETWEEN %s AND %s
+                           AND DATE(se.event_at) BETWEEN %s AND %s
                         GROUP BY se.student_id
-                    """, ('exit', 'Sortie%', '%Fuite%', 'absence', 'Suivi > Absence%', date_from, date_to))
+                    """, ('exit', 'Sortie%', '%Fuite%', 'absence', 'Suivi > Absence%', today, today))
                     for sid, exit_count, presence in cur.fetchall():
                         event_stats[sid] = {'exit': exit_count, 'presence': presence}
                 except Exception:
@@ -1176,14 +1228,15 @@ class MainWindow(QWidget):
                 if w:
                     w.deleteLater()
 
-            # Remplir les cartes avec colonnes adaptatives
+            # Grille multi-colonnes avec scroll vertical
+            cfg = CARD_THEMES.get(self._card_theme)
+            card_w = cfg.card_w + cfg.margin * 2
             avail_w = self._cards_scroll.viewport().width()
-            card_w = 124
-            spacing = 8
-            cols = max(1, (avail_w + spacing) // (card_w + spacing)) if avail_w > 100 else 3
+            spacing = self._cards_layout.spacing()
+            cols = max(1, (avail_w + spacing) // (card_w + spacing)) if avail_w > 100 else 2
             for idx, s in enumerate(self._students):
                 sid = s['id']
-                card = StudentCard(sid, s['last_name'], s['first_name'])
+                card = StudentCard(sid, s['last_name'], s['first_name'], cfg=cfg)
                 stats = event_stats.get(sid, {'exit': 0, 'presence': 'Présent'})
                 card.set_exit_count(stats['exit'])
                 is_absent = stats['presence'] == 'Absent'
@@ -1192,14 +1245,6 @@ class MainWindow(QWidget):
                 card.set_absent(is_absent)
                 card.clicked.connect(self._on_student_selected)
                 self._cards_layout.addWidget(card, idx // cols, idx % cols, Qt.AlignCenter)
-
-            # Étendre la grille
-            remaining = len(self._students) % cols
-            if remaining:
-                for _ in range(cols - remaining):
-                    spacer = QWidget()
-                    spacer.setFixedSize(124, 200)
-                    self._cards_layout.addWidget(spacer, len(self._students) // cols, cols - remaining + _, Qt.AlignCenter)
             self._top_bar.set_loading(False)
 
         except Exception as e:
@@ -1227,7 +1272,13 @@ class MainWindow(QWidget):
         self._sd_tabs.hide()
         self._sd_placeholder.show()
         self._class_stack.setCurrentIndex(0)
+        self._selected_student_id = 0
         self._top_bar.show_period_row(False)
+
+    def _on_card_theme(self, key: str):
+        self._card_theme = key
+        if self._current_class_id:
+            self._load_students(self._current_class_id)
 
     def _on_add_event(self):
         sid = self._selected_student_id
@@ -1294,17 +1345,17 @@ class MainWindow(QWidget):
 
             # Coordonnées
             self._sd_contact_labels['full_name'].setText(
-                f"<b>Nom :</b> {last_name.upper()} {first_name}")
+                f"{last_name.upper()} {first_name}")
             self._sd_contact_labels['email'].setText(
-                f"<b>Email :</b> {email or '—'}")
+                email or '—')
             self._sd_contact_labels['email_perso'].setText(
-                f"<b>Email personnel :</b> {email_perso or '—'}")
+                email_perso or '—')
             self._sd_contact_labels['tel_maison'].setText(
-                f"<b>Tél. maison :</b> {tel_maison or '—'}")
+                tel_maison or '—')
             self._sd_contact_labels['tel_portable'].setText(
-                f"<b>Tél. portable :</b> {tel_portable or '—'}")
+                tel_portable or '—')
             self._sd_contact_labels['date_entree'].setText(
-                f"<b>Date d'entrée :</b> {date_entree.strftime('%d/%m/%Y') if date_entree else '—'}")
+                date_entree.strftime('%d/%m/%Y') if date_entree else '—')
 
             # Photo
             pix = QPixmap(get_photo_path(student_id))
@@ -1580,8 +1631,14 @@ class MainWindow(QWidget):
     def refresh_all(self):
         self._top_bar.update_network()
         if self._current_group_mode == 'class':
-            self._show_class_mode(self._current_class_id)
+            if self._selected_student_id:
+                trace(f"refresh_all: reload student detail {self._selected_student_id}")
+                self._load_student_detail(self._selected_student_id)
+            else:
+                trace(f"refresh_all: show class mode {self._current_class_id}")
+                self._show_class_mode(self._current_class_id)
         elif self._current_group_mode:
+            trace(f"refresh_all: show group mode {self._current_group_mode}")
             self._show_group_mode(self._current_group_mode)
 
     def _refresh_timer(self):
@@ -1590,34 +1647,3 @@ class MainWindow(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, '_current_group_mode') and self._current_group_mode == 'class':
-            if self._students and self._class_stack.currentIndex() == 0:
-                self._reflow_cards()
-
-    def _reflow_cards(self):
-        avail_w = self._cards_scroll.viewport().width()
-        card_w = 124
-        spacing = 8
-        cols = max(1, (avail_w + spacing) // (card_w + spacing)) if avail_w > 100 else 3
-        # Garder les StudentCard, jeter les spacers
-        cards = []
-        for i in reversed(range(self._cards_layout.count())):
-            w = self._cards_layout.itemAt(i).widget()
-            if w:
-                self._cards_layout.removeWidget(w)
-                if isinstance(w, StudentCard):
-                    cards.insert(0, w)
-                else:
-                    w.deleteLater()
-        for idx, card in enumerate(cards):
-            self._cards_layout.addWidget(card, idx // cols, idx % cols, Qt.AlignCenter)
-        remaining = len(cards) % cols
-        if remaining:
-            for _ in range(cols - remaining):
-                sp = QWidget()
-                sp.setFixedSize(124, 200)
-                self._cards_layout.addWidget(sp, len(cards) // cols, cols - remaining + _, Qt.AlignCenter)
-
-
-# ---------------------------------------------------------------------------
-            QMessageBox.critical(self, "Erreur", str(e))

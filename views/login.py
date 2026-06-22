@@ -12,6 +12,7 @@ from PySide6.QtGui import QPixmap
 from LarcSuperviseur.common.database import db
 from LarcSuperviseur.common.session import session, UserRole, ConnMode
 from LarcSuperviseur.common.logger import log
+from LarcSuperviseur.common.trace import trace
 from LarcSuperviseur.common.network import detect_network
 from LarcSuperviseur.common.theme import theme_manager
 from LarcSuperviseur.common.auth import OAuth2Manager
@@ -61,11 +62,15 @@ class LoginWindow(QWidget):
         self._worker: Optional[_Worker] = None
         self._tabs_forced = False
         self.setWindowTitle("LarcSuperviseur \u2014 Connexion")
+        print("[TRACE] LoginWindow.__init__: démarre")
 
-        db.connect_intranet()
+        ok_intra = db.connect_intranet()
+        trace(f" LoginWindow.__init__: connect_intranet={ok_intra}")
         if not db.server_conn:
-            db.connect_cloud()
+            ok_cloud = db.connect_cloud()
+            trace(f" LoginWindow.__init__: connect_cloud={ok_cloud}")
         app_config.load()
+        trace(f" LoginWindow.__init__: server_conn={db.server_conn is not None}")
 
         self._term_label = self._get_current_term_label()
         self._init_ui()
@@ -309,12 +314,15 @@ class LoginWindow(QWidget):
         self._hide_error()
         self._set_busy(True)
 
-        if not db.connect_intranet():
+        ok = db.connect_intranet()
+        trace(f" _on_intranet: connect_intranet={ok}")
+        if not ok:
             self._set_busy(False)
             self._show_error("Impossible de se connecter \u00e0 l'Intranet.")
             return
 
         conn = db.server_conn
+        trace(f" _on_intranet: server_conn={conn is not None}")
         try:
             cur = conn.cursor()
             cur.execute(
@@ -372,7 +380,9 @@ class LoginWindow(QWidget):
                 pass
 
             log(f"Connexion Intranet : {session.full_name} ({role.value})")
+            trace(f" _on_intranet: session OK, appel _open_main_window")
             self._open_main_window()
+            trace(f" _open_main_window terminé")
 
         except Exception as e:
             self._set_busy(False)

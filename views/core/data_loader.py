@@ -39,9 +39,10 @@ class DataLoader:
         try:
             cur = self._cursor()
             cur.execute("""
-                SELECT t.id FROM larcauth_term t, larcauth_academicyear ay
-                WHERE ay.s_id = 1 AND t.trim = ay.current_term_number
-                ORDER BY t.id LIMIT 1
+                SELECT ay.current_term_number
+                FROM larcauth_academicyear ay
+                WHERE ay.s_id = 1
+                LIMIT 1
             """)
             r = cur.fetchone()
             return r[0] if r else 0
@@ -567,6 +568,9 @@ class DataLoader:
                       AND cts.enabled = TRUE
                     ORDER BY cts.label
                 """, (classroom_id, term_id))
+                rows = cur.fetchall()
+                if not rows:
+                    raise Exception("empty")
             except Exception:
                 cur.execute("""
                     SELECT cts.id, cts.label, cts.fk_teacher_id,
@@ -577,7 +581,8 @@ class DataLoader:
                       AND cts.enabled = TRUE
                     ORDER BY cts.label
                 """, (classroom_id,))
-            return cur.fetchall()
+                rows = cur.fetchall()
+            return rows
         except Exception as e:
             log(f"DataLoader.get_classroom_subjects: {e}")
             return []
