@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, Signal
 from LarcSuperviseur.common.logger import log
 from LarcSuperviseur.common.theme import theme_manager
 from LarcSuperviseur.views.core.data_loader import DataLoader
+from larccommon.l10n import _
 # EventGenerator imported lazily in _open_event_dialog to avoid circular import
 
 

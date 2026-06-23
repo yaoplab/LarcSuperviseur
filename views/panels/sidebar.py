@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QPushButton, QG
 from PySide6.QtCore import Signal, Qt
 
 from LarcSuperviseur.common.theme import theme_manager
+from larccommon.l10n import _
 
 # Fibonacci : {8, 13, 21, 34, 55, 89, 144, 233}
 FIB = {
@@ -123,7 +124,7 @@ class Sidebar(QScrollArea):
             layout.addLayout(grd)
             layout.addSpacing(FIB['s'])
 
-        self._all_btn = QPushButton("Toutes les classes")
+        self._all_btn = QPushButton(_('sidebar.all_classes'))
         self._all_btn.setFixedHeight(FIB['h_all'])
         self._all_btn.setCursor(Qt.PointingHandCursor)
         self._all_btn.setStyleSheet(

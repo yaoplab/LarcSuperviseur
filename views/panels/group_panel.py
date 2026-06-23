@@ -17,6 +17,7 @@ from LarcSuperviseur.common.event_helpers import event_icon, event_color
 from LarcSuperviseur.views.core.data_loader import DataLoader
 from LarcSuperviseur.views.core.event_actions import EventActions
 from LarcSuperviseur.views.core.event_dialog import EventEditDialog
+from larccommon.l10n import _
 
 
 class GroupPanel(QWidget):

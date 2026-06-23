@@ -8,6 +8,7 @@ from LarcSuperviseur.common.database import db
 from LarcSuperviseur.common.network import detect_network
 from LarcSuperviseur.common.theme import theme_manager
 from LarcSuperviseur.views.core.data_loader import DataLoader
+from larccommon.l10n import _
 
 
 class EventGenerator(QDialog):
@@ -26,7 +27,7 @@ class EventGenerator(QDialog):
         self._student_classroom_id = None
         self._student_classroom_label = ""
         self._loader = DataLoader()
-        self.setWindowTitle(f"Événement — élève #{student_id}")
+        self.setWindowTitle(_("event.window_title").format(id=student_id))
         self.setMinimumWidth(600)
         self._load_student_classroom()
         self._load_types_from_db()
@@ -49,7 +50,7 @@ class EventGenerator(QDialog):
         sp = 8
         rd = 4
         # --- 1. Infos élève ---
-        student_name = self._loader.get_student_name(self._student_id) or f"Élève #{self._student_id}"
+        student_name = self._loader.get_student_name(self._student_id) or _("event.student_fallback").format(id=self._student_id)
         top_row = QHBoxLayout()
         name_label = QLabel(f"<b>{student_name}</b>")
         name_label.setStyleSheet(f"font-size: {s(16)}px; padding: 8px; color: {p.text_strong};")
@@ -68,7 +69,7 @@ class EventGenerator(QDialog):
         dt_layout = QHBoxLayout(dt_frame)
         dt_layout.setSpacing(sp)
 
-        dt_layout.addWidget(QLabel("Date :"))
+        dt_layout.addWidget(QLabel(_("event.date")))
         self._date_edit = QDateEdit(QDate.currentDate())
         self._date_edit.setCalendarPopup(True)
         self._date_edit.setDisplayFormat("dddd dd MMMM yyyy")
@@ -78,7 +79,7 @@ class EventGenerator(QDialog):
             f"font-weight: bold;")
         dt_layout.addWidget(self._date_edit, 1)
 
-        dt_layout.addWidget(QLabel("Heure :"))
+        dt_layout.addWidget(QLabel(_("event.time")))
         self._time_edit = QTimeEdit(QTime.currentTime())
         self._time_edit.setDisplayFormat("HH:mm")
         self._time_edit.setStyleSheet(
@@ -95,9 +96,9 @@ class EventGenerator(QDialog):
         # --- 3. Lieu ---
         layout.addSpacing(sp)
         lieu_header_row = QHBoxLayout()
-        lieu_header_row.addWidget(QLabel("<b>Lieu :</b>"))
+        lieu_header_row.addWidget(QLabel(f"<b>{_('event.location')}</b>"))
         if self._student_classroom_label:
-            self._classe_label = QLabel(f"Classe : {self._student_classroom_label}")
+            self._classe_label = QLabel(_("event.classroom_label").format(label=self._student_classroom_label))
             self._classe_label.setStyleSheet(f"font-size: {s(12)}px; color: {p.text_soft}; padding: 4px 8px;")
             lieu_header_row.addStretch()
             lieu_header_row.addWidget(self._classe_label)
@@ -140,7 +141,7 @@ class EventGenerator(QDialog):
         self._matiere_group_widget = QWidget()
         matiere_vbox = QVBoxLayout(self._matiere_group_widget)
         matiere_vbox.setContentsMargins(0, 0, 0, 0)
-        matiere_vbox.addWidget(QLabel("<b>Matière :</b>"))
+        matiere_vbox.addWidget(QLabel(f"<b>{_('event.subject')}</b>"))
 
         self._subject_group = QButtonGroup(self)
         self._subject_group.setExclusive(True)
@@ -153,7 +154,7 @@ class EventGenerator(QDialog):
 
         # --- 5. Type d'événement hiérarchique ---
         layout.addSpacing(sp)
-        layout.addWidget(QLabel("<b>Type d'événement :</b>"))
+        layout.addWidget(QLabel(f"<b>{_('event.type')}</b>"))
         layout.addSpacing(4)
 
         # Barre de sélection cliquable (remplace _sel_label)
@@ -223,9 +224,9 @@ class EventGenerator(QDialog):
 
         # --- 6. Note ---
         layout.addSpacing(sp)
-        layout.addWidget(QLabel("<b>Note :</b>"))
+        layout.addWidget(QLabel(f"<b>{_('event.note')}</b>"))
         self._note_input = QTextEdit()
-        self._note_input.setPlaceholderText("Note optionnelle (200 caractères max)")
+        self._note_input.setPlaceholderText(_("event.note_placeholder"))
         self._note_input.setMaximumHeight(80)
         self._note_input.setStyleSheet(
             f"padding: 4px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
@@ -289,10 +290,10 @@ class EventGenerator(QDialog):
         p = theme_manager.palette
         s = theme_manager.font_size
         if intranet_ok and db.is_server_connected:
-            self._source_label.setText("Intranet")
+            self._source_label.setText(_("event.source_intranet"))
             self._source_label.setStyleSheet(f"color: {p.success}; font-size: {s(10)}px;")
         else:
-            self._source_label.setText("Cloud")
+            self._source_label.setText(_("event.source_cloud"))
             self._source_label.setStyleSheet(f"color: {p.primary}; font-size: {s(10)}px;")
 
     def _load_types_from_db(self):
@@ -409,7 +410,7 @@ class EventGenerator(QDialog):
 
     def _validate(self):
         if not self._selected_type_path:
-            QMessageBox.warning(self, "Erreur", "Sélectionnez un type d'événement.")
+            QMessageBox.warning(self, _("common.dialog.error_title"), _("event.select_type_required"))
             return
         self.accept()
 

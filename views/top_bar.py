@@ -8,6 +8,7 @@ from PySide6.QtGui import QPixmap, QPainter, QColor, QIcon
 from LarcSuperviseur.common.theme import theme_manager
 from LarcSuperviseur.common.session import session
 from LarcSuperviseur.common.network import detect_network
+from larccommon.l10n import _
 
 
 class TopBar(QFrame):
@@ -83,8 +84,8 @@ class TopBar(QFrame):
         self._period_group.setExclusive(True)
         self._period_keys: list[str] = []
 
-        fixed = [("Jour", 'day'), ("Semaine", 'week'), ("Mois", 'month'),
-                 ("Trimestre", 'term'), ("Année", 'year')]
+        fixed = [(_('topbar.period.day'), 'day'), (_('topbar.period.week'), 'week'), (_('topbar.period.month'), 'month'),
+                 (_('topbar.period.term'), 'term'), ("Année", 'year')]
         for label, key in fixed:
             btn = self._make_period_btn(label)
             btn.clicked.connect(lambda checked, k=key: self._on_period_click(k))
@@ -173,7 +174,7 @@ class TopBar(QFrame):
             self._network_label.setStyleSheet(
                 f"color: {p.primary}; font-weight: bold; font-size: {s(12)}px;")
         else:
-            self._network_label.setText("Hors ligne")
+            self._network_label.setText(_('topbar.network.offline'))
             self._network_label.setStyleSheet(
                 f"color: {p.text_disabled}; font-size: {s(12)}px;")
 

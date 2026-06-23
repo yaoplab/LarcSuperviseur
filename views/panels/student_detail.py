@@ -16,6 +16,7 @@ from LarcSuperviseur.common.photos import get_photo_path
 from LarcSuperviseur.common.logger import log
 from LarcSuperviseur.common.event_helpers import event_icon, event_color
 from LarcSuperviseur.views.core.event_actions import EventActions
+from larccommon.l10n import _
 from LarcSuperviseur.views.core.event_dialog import EventEditDialog
 from LarcSuperviseur.views.dialogs.event_generator import EventGenerator
 
@@ -47,7 +48,7 @@ class StudentDetail(QWidget):
 
         # Header row
         sd_header_row = QHBoxLayout()
-        self._back_btn = QPushButton("\u2190 Retour")
+        self._back_btn = QPushButton(_("common.button.back"))
         self._back_btn.setStyleSheet(
             f"QPushButton {{ background: transparent; color: {p.primary}; "
             f"border: none; font-weight: bold; "
@@ -59,7 +60,7 @@ class StudentDetail(QWidget):
         sd_header_row.addStretch()
         sd_layout.addLayout(sd_header_row)
 
-        self._sd_header = QLabel("<b>\u00c9l\u00e8ve</b>")
+        self._sd_header = QLabel(f"<b>{_('student.title')}</b>")
         self._sd_header.setObjectName("panel_title")
         self._sd_class = QLabel()
         self._sd_class.setStyleSheet(f"color: {p.text_soft}; font-size: {s(11)}px;")
@@ -115,7 +116,7 @@ class StudentDetail(QWidget):
             f"font-size: {s(28)}px; }}"
             f"QPushButton:hover {{ background: {p.active}; }}")
         self._sd_add_btn.setCursor(Qt.PointingHandCursor)
-        self._sd_add_btn.setToolTip("Ajouter un \u00e9v\u00e9nement")
+        self._sd_add_btn.setToolTip(_("student.add_event"))
         self._sd_add_btn.clicked.connect(self._on_add_event)
         contact_row.addWidget(self._sd_add_btn)
 
@@ -125,7 +126,7 @@ class StudentDetail(QWidget):
         kpi_r = QHBoxLayout()
         kpi_r.setSpacing(4)
         self._sd_kpis = {}
-        for k, lbl in [('abs', 'Absences'), ('exit', 'Sorties'), ('total', 'Total \u00e9vts')]:
+        for k, lbl in [('abs', _('chart.absences')), ('exit', _('kpi.exit')), ('total', _('kpi.total_events'))]:
             f = QFrame()
             f.setObjectName("kpi_small")
             f.setStyleSheet(
@@ -146,7 +147,7 @@ class StudentDetail(QWidget):
         t1_layout.addLayout(kpi_r)
 
         # Events
-        evt_label = QLabel("<b>Derniers \u00e9v\u00e9nements</b>")
+        evt_label = QLabel(f"<b>{_('student.tab.events')}</b>")
         evt_label.setStyleSheet(f"font-size: {s(11)}px;")
         self._sd_events = QTableWidget()
         self._sd_events.setAlternatingRowColors(True)
@@ -172,7 +173,7 @@ class StudentDetail(QWidget):
         self._sd_chart = QChart()
         self._sd_chart_view.setChart(self._sd_chart)
         tab_chart_layout.addWidget(self._sd_chart_view)
-        self._sd_chart_tabs.addTab(tab_chart, "\u00c9volution absences")
+        self._sd_chart_tabs.addTab(tab_chart, _("chart.evolution_absences"))
 
         t1_layout.addWidget(self._sd_chart_tabs)
 
@@ -185,19 +186,19 @@ class StudentDetail(QWidget):
         tab2 = QWidget()
         t2_layout = QVBoxLayout(tab2)
         t2_layout.setAlignment(Qt.AlignCenter)
-        placeholder2 = QLabel("Les informations sur les parents/tuteurs\nseront bient\u00f4t disponibles.")
+        placeholder2 = QLabel(_("student.parents_placeholder"))
         placeholder2.setAlignment(Qt.AlignCenter)
         placeholder2.setStyleSheet(f"color: {p.text_disabled}; font-size: {s(13)}px;")
         t2_layout.addWidget(placeholder2)
         scroll2.setWidget(tab2)
 
-        self._sd_tabs.addTab(scroll1, "Coordonn\u00e9es")
-        self._sd_tabs.addTab(scroll2, "Parents")
+        self._sd_tabs.addTab(scroll1, _("student.tab.coords"))
+        self._sd_tabs.addTab(scroll2, _("student.tab.parents"))
 
         sd_layout.addWidget(self._sd_tabs, 1)
 
         # Placeholder quand aucun \u00e9l\u00e8ve s\u00e9lectionn\u00e9
-        self._sd_placeholder = QLabel("S\u00e9lectionnez un \u00e9l\u00e8ve\ndans la liste")
+        self._sd_placeholder = QLabel(_("student.no_selection"))
         self._sd_placeholder.setAlignment(Qt.AlignCenter)
         self._sd_placeholder.setStyleSheet(f"color: {p.text_disabled}; font-size: {s(14)}px;")
         sd_layout.addWidget(self._sd_placeholder)
@@ -218,17 +219,17 @@ class StudentDetail(QWidget):
         self._sd_class.setText(info['class_label'])
 
         self._sd_contact_labels['full_name'].setText(
-            f"<b>Nom :</b> {info['last_name'].upper()} {info['first_name']}")
+            f"<b>{_('student.contact.name')} :</b> {info['last_name'].upper()} {info['first_name']}")
         self._sd_contact_labels['email'].setText(
-            f"<b>Email :</b> {info.get('email') or '\u2014'}")
+            f"<b>{_('student.contact.email')} :</b> {info.get('email') or '\u2014'}")
         self._sd_contact_labels['email_perso'].setText(
-            f"<b>Email personnel :</b> {info.get('email_perso') or '\u2014'}")
+            f"<b>{_('student.contact.email_perso')} :</b> {info.get('email_perso') or '\u2014'}")
         self._sd_contact_labels['tel_maison'].setText(
-            f"<b>T\u00e9l. maison :</b> {info.get('tel_maison') or '\u2014'}")
+            f"<b>{_('student.contact.tel_maison')} :</b> {info.get('tel_maison') or '\u2014'}")
         self._sd_contact_labels['tel_portable'].setText(
-            f"<b>T\u00e9l. portable :</b> {info.get('tel_portable') or '\u2014'}")
+            f"<b>{_('student.contact.tel_portable')} :</b> {info.get('tel_portable') or '\u2014'}")
         self._sd_contact_labels['date_entree'].setText(
-            f"<b>Date d'entr\u00e9e :</b> {info.get('date_entree').strftime('%d/%m/%Y') if info.get('date_entree') else '\u2014'}")
+            f"<b>{_('student.contact.date_entree')} :</b> {info.get('date_entree').strftime('%d/%m/%Y') if info.get('date_entree') else '\u2014'}")
 
         pix = QPixmap(get_photo_path(student_id))
         if not pix.isNull():
@@ -261,7 +262,7 @@ class StudentDetail(QWidget):
                 dt = QDateTime(qd, QTime(0, 0))
                 line.append(dt.toMSecsSinceEpoch(), cnt)
             self._sd_chart.addSeries(line)
-            self._sd_chart.setTitle("\u00c9volution des absences (trimestre)")
+            self._sd_chart.setTitle(_("chart.abs_trend_term"))
             self._sd_chart.setAnimationOptions(QChart.SeriesAnimations)
             self._sd_chart.legend().setVisible(False)
             ax_x = QDateTimeAxis()
@@ -275,12 +276,15 @@ class StudentDetail(QWidget):
             self._sd_chart.addAxis(ax_y, Qt.AlignLeft)
             line.attachAxis(ax_y)
         else:
-            self._sd_chart.setTitle("\u00c9volution des absences \u2014 aucune donn\u00e9e")
+            self._sd_chart.setTitle(_("chart.abs_trend_nodata"))
 
         evts = self._loader.get_student_events(student_id)
         self._sd_events.setRowCount(len(evts))
         self._sd_events.setColumnCount(8)
-        self._sd_events.setHorizontalHeaderLabels(["ID", "Type", "Lieu", "Mati\u00e8re", "Date", "Note", "Cr\u00e9\u00e9 par", "Valid\u00e9"])
+        self._sd_events.setHorizontalHeaderLabels([
+            _("table.id"), _("table.type"), _("table.location"),
+            _("table.subject"), _("table.date"), _("table.note"),
+            _("table.created_by"), _("table.validated")])
         self._sd_events.setColumnHidden(0, True)
         for i, evt in enumerate(evts):
             ei = event_icon(evt['event_type'])
@@ -323,7 +327,7 @@ class StudentDetail(QWidget):
             data = dlg.get_data()
             data['created_by'] = session.user_id
             if not self._loader.insert_event(data):
-                QMessageBox.critical(self, "Erreur", "\u00c9chec de l'enregistrement.")
+                QMessageBox.critical(self, _("common.dialog.error_title"), _("student.save_error"))
                 return
             self.load(sid)
 
@@ -346,9 +350,10 @@ class StudentDetail(QWidget):
         event = self._actions.get_event_by_id(eid)
         is_validated = event is not None and event.get('validated_by') is not None
         menu = QMenu(self)
-        edit_action = menu.addAction("\u270f\ufe0f Modifier")
-        validate_action = menu.addAction("\U0001f512 D\u00e9valider" if is_validated else "\u2705 Valider")
-        delete_action = menu.addAction("\U0001f5d1\ufe0f Supprimer")
+        edit_action = menu.addAction(_("context_menu.edit"))
+        validate_action = menu.addAction(
+            _("context_menu.invalidate") if is_validated else _("context_menu.validate"))
+        delete_action = menu.addAction(_("context_menu.delete"))
         chosen = menu.exec(table.viewport().mapToGlobal(pos))
         if chosen == edit_action:
             self._edit_event(eid)
@@ -376,8 +381,8 @@ class StudentDetail(QWidget):
 
     def _delete_event(self, event_id: int):
         reply = QMessageBox.question(
-            self, "Confirmer la suppression",
-            f"Supprimer d\u00e9finitivement l'\u00e9v\u00e9nement #{event_id} ?",
+            self, _("student.confirm_delete_event"),
+            _("common.dialog.delete_event").format(id=event_id),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply != QMessageBox.Yes:
             return

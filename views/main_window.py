@@ -22,6 +22,7 @@ from LarcSuperviseur.views.core.time_manager import TimeManager
 from LarcSuperviseur.views.top_bar import TopBar
 from LarcSuperviseur.views.core.cardsList.config import CARD_THEMES
 from LarcSuperviseur.common.trace import trace
+from larccommon.l10n import _
 
 
 from LarcSuperviseur.common.event_helpers import event_icon, event_color
@@ -123,7 +124,7 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         trace(f" MainWindow.__init__: démarre")
-        self.setWindowTitle(f"LarcSuperviseur — {session.full_name} ({session.role.value})")
+        self.setWindowTitle(f"{_('main.title')} — {session.full_name} ({session.role.value})")
         self._current_class_id: int = 0
         self._current_class_label: str = ''
         self._selected_btn: QPushButton | None = None
@@ -183,8 +184,8 @@ class MainWindow(QWidget):
         kpi_row = QHBoxLayout()
         kpi_row.setSpacing(8)
         self._kpi_cards = {}
-        for k, label in [('total', 'Total élèves'), ('present', 'Présents'),
-                          ('absent', 'Absents'), ('exit', 'Sorties')]:
+        for k, label in [('total', _('kpi.total')), ('present', _('kpi.present')),
+                          ('absent', _('kpi.absent')), ('exit', _('kpi.exit'))]:
             card = QFrame()
             card.setObjectName("kpi_card")
             card.setFixedHeight(80)
@@ -214,12 +215,12 @@ class MainWindow(QWidget):
         self._absents_group = QFrame()
         self._absents_group.setObjectName("panel")
         absents_layout = QVBoxLayout(self._absents_group)
-        absents_title = QLabel("<b>Absents</b>")
+        absents_title = QLabel(f"<b>{_('kpi.absent')}</b>")
         absents_title.setObjectName("panel_title")
         absents_layout.addWidget(absents_title)
         self._absents_table = QTableWidget()
         self._absents_table.setColumnCount(3)
-        self._absents_table.setHorizontalHeaderLabels(["Nom", "Classe", "Motif"])
+        self._absents_table.setHorizontalHeaderLabels([_('table.header.name'), _('table.header.class'), _('table.header.reason')])
         self._absents_table.horizontalHeader().setStretchLastSection(True)
         self._absents_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self._absents_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -230,7 +231,7 @@ class MainWindow(QWidget):
         self._history_group = QFrame()
         self._history_group.setObjectName("panel")
         self._history_layout = QVBoxLayout(self._history_group)
-        history_title = QLabel("<b>Historique des événements</b>")
+        history_title = QLabel(f"<b>{_('history.title')}</b>")
         history_title.setObjectName("panel_title")
         self._history_table = QTableWidget()
         self._history_table.setAlternatingRowColors(True)
@@ -248,17 +249,17 @@ class MainWindow(QWidget):
         filter_row.setSpacing(6)
         self._history_filter_class = QComboBox()
         self._history_filter_class.setMinimumWidth(150)
-        self._history_filter_class.addItem("Toutes les classes", '')
-        filter_row.addWidget(QLabel("Classe:"))
+        self._history_filter_class.addItem(_('history.filter_all_classes'), '')
+        filter_row.addWidget(QLabel(_('history.filter_class') + ':'))
         filter_row.addWidget(self._history_filter_class)
         self._history_filter_type = QComboBox()
         self._history_filter_type.setMinimumWidth(180)
         self._history_filter_type.setEditable(True)
-        self._history_filter_type.lineEdit().setPlaceholderText("Type événement...")
-        filter_row.addWidget(QLabel("Type:"))
+        self._history_filter_type.lineEdit().setPlaceholderText(_('history.filter_type_placeholder'))
+        filter_row.addWidget(QLabel(_('history.filter_type') + ':'))
         filter_row.addWidget(self._history_filter_type)
         filter_row.addSpacing(10)
-        filter_btn = QPushButton("Filtrer")
+        filter_btn = QPushButton(_('history.filter_button'))
         filter_btn.setCursor(Qt.PointingHandCursor)
         filter_btn.clicked.connect(lambda: self._load_global_history(self._current_group_mode))
         filter_row.addWidget(filter_btn)
@@ -284,7 +285,7 @@ class MainWindow(QWidget):
         self._abs_bar = QChart()
         self._abs_bar_view.setChart(self._abs_bar)
         tab_abs_layout.addWidget(self._abs_bar_view)
-        self._charts_tabs.addTab(tab_abs, "Absences")
+        self._charts_tabs.addTab(tab_abs, _('chart.absences'))
 
         tab_exit = QWidget()
         tab_exit_layout = QVBoxLayout(tab_exit)
@@ -295,7 +296,7 @@ class MainWindow(QWidget):
         self._exit_bar = QChart()
         self._exit_bar_view.setChart(self._exit_bar)
         tab_exit_layout.addWidget(self._exit_bar_view)
-        self._charts_tabs.addTab(tab_exit, "Sorties")
+        self._charts_tabs.addTab(tab_exit, _('chart.exits'))
 
         tab_trend = QWidget()
         tab_trend_layout = QVBoxLayout(tab_trend)
@@ -307,7 +308,7 @@ class MainWindow(QWidget):
         self._trend_chart.setAnimationOptions(QChart.SeriesAnimations)
         self._trend_view.setChart(self._trend_chart)
         tab_trend_layout.addWidget(self._trend_view)
-        self._charts_tabs.addTab(tab_trend, "Tendance")
+        self._charts_tabs.addTab(tab_trend, _('chart.trend'))
 
         tab_donut = QWidget()
         tab_donut_layout = QVBoxLayout(tab_donut)
@@ -318,14 +319,14 @@ class MainWindow(QWidget):
         self._donut_chart = QChart()
         self._donut_view.setChart(self._donut_chart)
         tab_donut_layout.addWidget(self._donut_view)
-        self._charts_tabs.addTab(tab_donut, "Taux présence")
+        self._charts_tabs.addTab(tab_donut, _('chart.presence_rate'))
 
         bottom_row.addWidget(self._charts_tabs, 3)
 
         self._stats_group = QFrame()
         self._stats_group.setObjectName("panel")
         self._stats_layout = QVBoxLayout(self._stats_group)
-        stats_title = QLabel("<b>Statistiques par classe</b>")
+        stats_title = QLabel(f"<b>{_('table.stats_title')}</b>")
         stats_title.setObjectName("panel_title")
         self._stats_table = QTableWidget()
         self._stats_table.setAlternatingRowColors(True)
@@ -359,7 +360,7 @@ class MainWindow(QWidget):
         # Header row: titre à gauche, bouton EDT à droite
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
-        self._cards_title = QLabel("<b>Élèves</b>")
+        self._cards_title = QLabel(f"<b>{_('student.cards_title')}</b>")
         self._cards_title.setObjectName("panel_title")
         header_row.addWidget(self._cards_title)
         header_row.addStretch()
@@ -371,7 +372,7 @@ class MainWindow(QWidget):
             btn = QPushButton(label)
             btn.setCheckable(True)
             btn.setFixedSize(34, 34)
-            btn.setToolTip(f"Phi {key.capitalize()}")
+            btn.setToolTip(f"{_('student.phi_theme')} {key.capitalize()}")
             btn.setStyleSheet(
                 f"QPushButton {{ font-size: 16px; border: 1px solid {theme_manager.palette.outline_variant}; "
                 f"border-radius: 4px; background: {theme_manager.palette.surface_variant}; "
@@ -384,7 +385,7 @@ class MainWindow(QWidget):
             if key == 'medium':
                 btn.setChecked(True)
             header_row.addWidget(btn)
-        self._tt_edit_btn = QPushButton("🕐 Emploi du temps")
+        self._tt_edit_btn = QPushButton(f"🕐 {_('student.timetable')}")
         self._tt_edit_btn.setStyleSheet(
             f"QPushButton {{ background: {theme_manager.palette.surface_variant}; "
             f"color: {theme_manager.palette.text_strong}; border: none; "
@@ -401,12 +402,12 @@ class MainWindow(QWidget):
         self._class_absents_group.setObjectName("panel")
         cal = QVBoxLayout(self._class_absents_group)
         cal.setContentsMargins(8, 4, 8, 4)
-        cal_title = QLabel("<b>Absents du jour</b>")
+        cal_title = QLabel(f"<b>{_('student.absents_today')}</b>")
         cal_title.setStyleSheet("font-size: 13px; font-weight: bold;")
         cal.addWidget(cal_title)
         self._class_absents_table = QTableWidget()
         self._class_absents_table.setColumnCount(2)
-        self._class_absents_table.setHorizontalHeaderLabels(["Nom", "Motif"])
+        self._class_absents_table.setHorizontalHeaderLabels([_('table.header.name'), _('table.header.reason')])
         self._class_absents_table.horizontalHeader().setStretchLastSection(True)
         self._class_absents_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self._class_absents_table.setMaximumHeight(150)
@@ -445,7 +446,7 @@ class MainWindow(QWidget):
 
         # Header row
         sd_header_row = QHBoxLayout()
-        back_btn = QPushButton("← Retour")
+        back_btn = QPushButton(f"← {_('student.back')}")
         back_btn.setStyleSheet(
             f"QPushButton {{ background: transparent; color: {p.primary}; "
             f"border: none; font-weight: bold; "
@@ -457,7 +458,7 @@ class MainWindow(QWidget):
         sd_header_row.addStretch()
         sd_layout.addLayout(sd_header_row)
 
-        self._sd_header = QLabel("<b>Élève</b>")
+        self._sd_header = QLabel(f"<b>{_('student.detail_header')}</b>")
         self._sd_header.setObjectName("panel_title")
         self._sd_class = QLabel()
         self._sd_class.setStyleSheet(f"color: {p.text_soft}; font-size: {s(11)}px;")
@@ -492,12 +493,12 @@ class MainWindow(QWidget):
         info_col.setColumnStretch(1, 1)
         self._sd_contact_labels = {}
         for i, (key, lbl) in enumerate([
-            ('full_name', 'Nom'),
-            ('email', 'Email'),
-            ('email_perso', 'Email personnel'),
-            ('tel_maison', 'Téléphone maison'),
-            ('tel_portable', 'Téléphone portable'),
-            ('date_entree', "Date d'entrée"),
+            ('full_name', _('student.contact_name')),
+            ('email', _('student.contact_email')),
+            ('email_perso', _('student.contact_email_personal')),
+            ('tel_maison', _('student.contact_phone_home')),
+            ('tel_portable', _('student.contact_phone_mobile')),
+            ('date_entree', _('student.contact_date_entry')),
         ]):
             label = QLabel(f"<b>{lbl} :</b>")
             label.setStyleSheet(f"font-size: {s(13)}px; color: {p.text_strong};")
@@ -518,7 +519,7 @@ class MainWindow(QWidget):
             f"font-size: {s(28)}px; }}"
             f"QPushButton:hover {{ background: {p.active}; }}")
         self._sd_add_btn.setCursor(Qt.PointingHandCursor)
-        self._sd_add_btn.setToolTip("Ajouter un événement")
+        self._sd_add_btn.setToolTip(_('student.add_event_tooltip'))
         self._sd_add_btn.clicked.connect(self._on_add_event)
         contact_row.addWidget(self._sd_add_btn)
 
@@ -528,7 +529,7 @@ class MainWindow(QWidget):
         kpi_r = QHBoxLayout()
         kpi_r.setSpacing(4)
         self._sd_kpis = {}
-        for k, lbl in [('abs', 'Absences'), ('exit', 'Sorties'), ('total', 'Total évts')]:
+        for k, lbl in [('abs', _('student.kpi_absences')), ('exit', _('student.kpi_exits')), ('total', _('student.kpi_total_events'))]:
             f = QFrame()
             f.setObjectName("kpi_small")
             f.setStyleSheet(
@@ -549,7 +550,7 @@ class MainWindow(QWidget):
         t1_layout.addLayout(kpi_r)
 
         # Events
-        evt_label = QLabel("<b>Derniers événements</b>")
+        evt_label = QLabel(f"<b>{_('student.recent_events')}</b>")
         evt_label.setStyleSheet(f"font-size: {s(11)}px;")
         self._sd_events = QTableWidget()
         self._sd_events.setAlternatingRowColors(True)
@@ -575,7 +576,7 @@ class MainWindow(QWidget):
         self._sd_chart = QChart()
         self._sd_chart_view.setChart(self._sd_chart)
         tab_chart_layout.addWidget(self._sd_chart_view)
-        self._sd_chart_tabs.addTab(tab_chart, "Évolution absences")
+        self._sd_chart_tabs.addTab(tab_chart, _('student.absence_evolution'))
 
         t1_layout.addWidget(self._sd_chart_tabs)
 
@@ -588,19 +589,19 @@ class MainWindow(QWidget):
         tab2 = QWidget()
         t2_layout = QVBoxLayout(tab2)
         t2_layout.setAlignment(Qt.AlignCenter)
-        placeholder2 = QLabel("Les informations sur les parents/tuteurs\nseront bientôt disponibles.")
+        placeholder2 = QLabel(_('student.parents_placeholder'))
         placeholder2.setAlignment(Qt.AlignCenter)
         placeholder2.setStyleSheet(f"color: {p.text_disabled}; font-size: {s(13)}px;")
         t2_layout.addWidget(placeholder2)
         scroll2.setWidget(tab2)
 
-        self._sd_tabs.addTab(scroll1, "Coordonnées")
-        self._sd_tabs.addTab(scroll2, "Parents")
+        self._sd_tabs.addTab(scroll1, _('student.tab_coordinates'))
+        self._sd_tabs.addTab(scroll2, _('student.tab_parents'))
 
         sd_layout.addWidget(self._sd_tabs, 1)
 
         # Placeholder quand aucun élève sélectionné
-        self._sd_placeholder = QLabel("Sélectionnez un élève\ndans la liste")
+        self._sd_placeholder = QLabel(_('student.select_prompt'))
         self._sd_placeholder.setAlignment(Qt.AlignCenter)
         self._sd_placeholder.setStyleSheet(f"color: {p.text_disabled}; font-size: {s(14)}px;")
         sd_layout.addWidget(self._sd_placeholder)
@@ -649,8 +650,8 @@ class MainWindow(QWidget):
 
         # Sections : Collège (PEI | MYP), Lycée (DP | DPEn)
         sections = [
-            ('Collège', [('PEI', 'PEI'), ('MYP', 'MYP')]),
-            ('Lycée',   [('DP', 'DPFr'), ('DPEn', 'DPEn')]),
+            (_('sidebar.section_college'), [('PEI', 'PEI'), ('MYP', 'MYP')]),
+            (_('sidebar.section_lycee'),   [('DP', 'DPFr'), ('DPEn', 'DPEn')]),
         ]
 
         for sec_name, columns in sections:
@@ -705,14 +706,14 @@ class MainWindow(QWidget):
             f"QPushButton:hover {{ background: {p.active}; }}",
             min_h=55
         )
-        self._all_btn.setText("Toutes les classes")
+        self._all_btn.setText(_('sidebar.all_classes'))
         self._all_btn.clicked.connect(self._on_all_clicked)
         layout.addWidget(self._all_btn)
         layout.addStretch()
         trace(f" _build_sidebar: terminé")
 
     def _on_section_clicked(self, section: str):
-        mode_map = {'Collège': 'grp_college', 'Lycée': 'grp_lycee'}
+        mode_map = {_('sidebar.section_college'): 'grp_college', _('sidebar.section_lycee'): 'grp_lycee'}
         self._current_group_mode = mode_map[section]
         self._current_class_id = 0
         self._current_class_label = section
@@ -750,12 +751,12 @@ class MainWindow(QWidget):
             btn.setChecked(True)
 
     def _load_initial_data(self):
-        self._top_bar.set_loading(True, "Données initiales...")
+        self._top_bar.set_loading(True, _('topbar.loading_initial'))
         trace(f" _load_initial_data: démarre")
         conn = db.server_conn
         trace(f" _load_initial_data: server_conn={conn is not None}")
         if not conn:
-            QMessageBox.warning(self, "Erreur", "Non connecté au serveur.")
+            QMessageBox.warning(self, _('common.error'), _('main.error_no_connection'))
             self._top_bar.set_loading(False)
             return
 
@@ -809,7 +810,7 @@ class MainWindow(QWidget):
 
         except Exception as e:
             log(f"_load_initial_data: {e}")
-            QMessageBox.critical(self, "Erreur", str(e))
+            QMessageBox.critical(self, _('common.error'), str(e))
             self._top_bar.set_loading(False)
 
     def _on_period_clicked(self, key: str):
@@ -838,7 +839,7 @@ class MainWindow(QWidget):
         trace(f" _show_group_mode({mode}): terminé")
 
     def _load_group_stats(self, mode: str):
-        self._top_bar.set_loading(True, "Statistiques...")
+        self._top_bar.set_loading(True, _('topbar.loading_stats'))
         conn = db.server_conn
         trace(f" _load_group_stats: mode={mode}, server_conn={conn is not None}, term_id={self._time_manager.term_id}")
         if not conn or not self._time_manager.term_id:
@@ -924,7 +925,7 @@ class MainWindow(QWidget):
             self._stats_table.setRowCount(len(rows))
             self._stats_table.setColumnCount(5)
             self._stats_table.setHorizontalHeaderLabels(
-                ["Classe", "Événements", "Absences", "Sorties", "Élèves"])
+                [_('table.header.class'), _('table.header.events'), _('table.header.absences'), _('table.header.exits'), _('table.header.students')])
 
             for i, (cid, label, evts, absences, exits, students) in enumerate(rows):
                 items = [
@@ -960,7 +961,7 @@ class MainWindow(QWidget):
                 series = QBarSeries()
                 series.append(abs_set)
                 self._abs_bar.addSeries(series)
-                self._abs_bar.setTitle("Absences par classe")
+                self._abs_bar.setTitle(_('chart.absences_by_class'))
                 self._abs_bar.setAnimationOptions(QChart.SeriesAnimations)
                 self._abs_bar.legend().setVisible(False)
                 axis_x = QBarCategoryAxis()
@@ -974,7 +975,7 @@ class MainWindow(QWidget):
                 self._abs_bar.addAxis(axis_y, Qt.AlignLeft)
                 series.attachAxis(axis_y)
             else:
-                self._abs_bar.setTitle("Absences par classe — aucune donnée")
+                self._abs_bar.setTitle(_('chart.absences_by_class_empty'))
 
             # --- Barres sorties par classe ---
             self._exit_bar.removeAllSeries()
@@ -988,7 +989,7 @@ class MainWindow(QWidget):
                 exit_series = QBarSeries()
                 exit_series.append(exit_set)
                 self._exit_bar.addSeries(exit_series)
-                self._exit_bar.setTitle("Sorties par classe")
+                self._exit_bar.setTitle(_('chart.exits_by_class'))
                 self._exit_bar.setAnimationOptions(QChart.SeriesAnimations)
                 self._exit_bar.legend().setVisible(False)
                 ex_axis_x = QBarCategoryAxis()
@@ -1002,7 +1003,7 @@ class MainWindow(QWidget):
                 self._exit_bar.addAxis(ex_axis_y, Qt.AlignLeft)
                 exit_series.attachAxis(ex_axis_y)
             else:
-                self._exit_bar.setTitle("Sorties par classe — aucune donnée")
+                self._exit_bar.setTitle(_('chart.exits_by_class_empty'))
 
             # --- Tendance absences sur la période ---
             self._trend_chart.removeAllSeries()
@@ -1030,7 +1031,7 @@ class MainWindow(QWidget):
                     dt = QDateTime(qd, QTime(0, 0))
                     line.append(dt.toMSecsSinceEpoch(), cnt)
                 self._trend_chart.addSeries(line)
-                self._trend_chart.setTitle("Tendance des absences")
+                self._trend_chart.setTitle(_('chart.trend_absences'))
                 self._trend_chart.setAnimationOptions(QChart.SeriesAnimations)
                 self._trend_chart.legend().setVisible(False)
                 axis_x_dt = QDateTimeAxis()
@@ -1044,7 +1045,7 @@ class MainWindow(QWidget):
                 self._trend_chart.addAxis(axis_y_t, Qt.AlignLeft)
                 line.attachAxis(axis_y_t)
             else:
-                self._trend_chart.setTitle("Tendance des absences — aucune donnée")
+                self._trend_chart.setTitle(_('chart.trend_absences_empty'))
 
             # --- Donut taux de présence ---
             self._donut_chart.removeAllSeries()
@@ -1080,23 +1081,23 @@ class MainWindow(QWidget):
                 donut = QPieSeries()
                 donut.setHoleSize(0.45)
                 if present_count > 0:
-                    donut.append("Présents", present_count)
+                    donut.append(_('chart.present'), present_count)
                     donut.slices()[-1].setColor(QColor(p.success))
                     donut.slices()[-1].setLabelVisible(True)
-                    donut.slices()[-1].setLabel(f"Présents {present_count}")
+                    donut.slices()[-1].setLabel(f"{_('chart.present')} {present_count}")
                     donut.slices()[-1].setLabelColor(QColor(p.text_strong))
                 if absent_count > 0:
-                    donut.append("Absents", absent_count)
+                    donut.append(_('chart.absent'), absent_count)
                     donut.slices()[-1].setColor(QColor(p.error))
                     donut.slices()[-1].setLabelVisible(True)
-                    donut.slices()[-1].setLabel(f"Absents {absent_count}")
+                    donut.slices()[-1].setLabel(f"{_('chart.absent')} {absent_count}")
                     donut.slices()[-1].setLabelColor(QColor(p.text_strong))
                 self._donut_chart.addSeries(donut)
-                self._donut_chart.setTitle("Taux de présence")
+                self._donut_chart.setTitle(_('chart.presence_rate'))
                 self._donut_chart.legend().setVisible(False)
                 self._donut_chart.setAnimationOptions(QChart.SeriesAnimations)
             else:
-                self._donut_chart.setTitle("Taux de présence — aucune donnée")
+                self._donut_chart.setTitle(_('chart.presence_rate_empty'))
 
             self._top_bar.set_loading(False)
 
@@ -1105,7 +1106,7 @@ class MainWindow(QWidget):
             self._top_bar.set_loading(False)
 
     def _load_global_history(self, mode: str):
-        self._top_bar.set_loading(True, "Événements...")
+        self._top_bar.set_loading(True, _('topbar.loading_events'))
         conn = db.server_conn
         if not conn or not self._time_manager.term_id:
             self._top_bar.set_loading(False)
@@ -1180,7 +1181,7 @@ class MainWindow(QWidget):
             self._history_table.setRowCount(len(rows))
             self._history_table.setColumnCount(10)
             self._history_table.setHorizontalHeaderLabels(
-                ["ID", "Élève", "Classe", "Type", "Lieu", "Matière", "Heure", "Note", "Créé par", "Validé"])
+                [_('table.header.id'), _('table.header.student'), _('table.header.class'), _('table.header.type'), _('table.header.location'), _('table.header.subject'), _('table.header.time'), _('table.header.note'), _('table.header.created_by'), _('table.header.validated')])
             self._history_table.setColumnHidden(0, True)  # event_id
 
             for i, row in enumerate(rows):
@@ -1235,12 +1236,12 @@ class MainWindow(QWidget):
         self._class_stack.setCurrentIndex(0)
         self._top_bar.show_period_row(False)
 
-        self._cards_title.setText(f"<b>Élèves de {self._current_class_label}</b>")
+        self._cards_title.setText(f"<b>{_('main.students_of')} {self._current_class_label}</b>")
         self._load_students(class_id)
         self._selected_student_id = 0
 
     def _load_students(self, class_id: int):
-        self._top_bar.set_loading(True, "Élèves...")
+        self._top_bar.set_loading(True, _('topbar.loading_students'))
         conn = db.server_conn
         if not conn or not self._time_manager.term_id:
             self._top_bar.set_loading(False)
@@ -1375,9 +1376,9 @@ class MainWindow(QWidget):
             data = dlg.get_data()
             conn = db.server_conn
             if not conn:
-                QMessageBox.warning(self, "Erreur", "Aucune connexion base de données.")
+                QMessageBox.warning(self, _('common.error'), _('main.error_no_db_connection'))
                 return
-            self._top_bar.set_loading(True, "Enregistrement...")
+            self._top_bar.set_loading(True, _('main.saving'))
             try:
                 cur = conn.cursor()
                 cur.execute(
@@ -1393,12 +1394,12 @@ class MainWindow(QWidget):
                 log(f"_on_add_event insert: {e}")
                 self._top_bar.set_loading(False)
                 conn.rollback()
-                QMessageBox.critical(self, "Erreur", f"Échec de l'enregistrement : {e}")
+                QMessageBox.critical(self, _('common.error'), f"{_('main.error_save_failed')} : {e}")
                 return
             self._load_student_detail(sid)
 
     def _load_student_detail(self, student_id: int):
-        self._top_bar.set_loading(True, "Détail élève...")
+        self._top_bar.set_loading(True, _('topbar.loading_detail'))
         conn = db.server_conn
         if not conn or not self._current_class_id:
             self._top_bar.set_loading(False)
@@ -1492,7 +1493,7 @@ class MainWindow(QWidget):
                     dt = QDateTime(qd, QTime(0, 0))
                     line.append(dt.toMSecsSinceEpoch(), cnt)
                 self._sd_chart.addSeries(line)
-                self._sd_chart.setTitle("Évolution des absences (trimestre)")
+                self._sd_chart.setTitle(_('student.chart_absence_evolution'))
                 self._sd_chart.setAnimationOptions(QChart.SeriesAnimations)
                 self._sd_chart.legend().setVisible(False)
                 ax_x = QDateTimeAxis()
@@ -1506,7 +1507,7 @@ class MainWindow(QWidget):
                 self._sd_chart.addAxis(ax_y, Qt.AlignLeft)
                 line.attachAxis(ax_y)
             else:
-                self._sd_chart.setTitle("Évolution des absences — aucune donnée")
+                self._sd_chart.setTitle(_('student.chart_absence_evolution_empty'))
 
             # -- Derniers événements --
             cur.execute("""
@@ -1522,7 +1523,7 @@ class MainWindow(QWidget):
             evts = cur.fetchall()
             self._sd_events.setRowCount(len(evts))
             self._sd_events.setColumnCount(8)
-            self._sd_events.setHorizontalHeaderLabels(["ID", "Type", "Lieu", "Matière", "Date", "Note", "Créé par", "Validé"])
+            self._sd_events.setHorizontalHeaderLabels([_('table.header.id'), _('table.header.type'), _('table.header.location'), _('table.header.subject'), _('table.header.date'), _('table.header.note'), _('table.header.created_by'), _('table.header.validated')])
             self._sd_events.setColumnHidden(0, True)
             for i, (eid, etype, e_at, lieu, subject, note, creator, validated) in enumerate(evts):
                 ei = event_icon(etype)
@@ -1584,9 +1585,9 @@ class MainWindow(QWidget):
             row = cur.fetchone()
             is_validated = row and row[0] is not None
         menu = QMenu(self)
-        edit_action = menu.addAction("✏️ Modifier")
-        validate_action = menu.addAction("🔒 Dévalider" if is_validated else "✅ Valider")
-        delete_action = menu.addAction("🗑️ Supprimer")
+        edit_action = menu.addAction(f"✏️ {_('context_menu.edit')}")
+        validate_action = menu.addAction(f"🔒 {_('context_menu.invalidate')}" if is_validated else f"✅ {_('context_menu.validate')}")
+        delete_action = menu.addAction(f"🗑️ {_('context_menu.delete')}")
         chosen = menu.exec(table.viewport().mapToGlobal(pos))
         if chosen == edit_action:
             self._edit_event(eid)
@@ -1607,7 +1608,7 @@ class MainWindow(QWidget):
     def _edit_event(self, event_id: int):
         conn = db.server_conn
         if not conn:
-            QMessageBox.warning(self, "Erreur", "Aucune connexion base de données.")
+            QMessageBox.warning(self, _('common.error'), _('main.error_no_db_connection'))
             return
         cur = conn.cursor()
         cur.execute("""
@@ -1619,12 +1620,12 @@ class MainWindow(QWidget):
         """, (event_id,))
         row = cur.fetchone()
         if not row:
-            QMessageBox.warning(self, "Erreur", "Événement introuvable.")
+            QMessageBox.warning(self, _('common.error'), _('main.error_event_not_found'))
             return
         etype, e_at, lieu, subject, note, student_name = row
 
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"Modifier l'événement #{event_id}")
+        dlg.setWindowTitle(f"{_('event.edit_title')} #{event_id}")
         dlg.setMinimumSize(480, 400)
         layout = QVBoxLayout(dlg)
         p = theme_manager.palette
@@ -1640,7 +1641,7 @@ class MainWindow(QWidget):
         layout.addWidget(info)
 
         # Type
-        layout.addWidget(QLabel("Type d'événement:"))
+        layout.addWidget(QLabel(_('event.edit_type')))
         type_input = QComboBox()
         cur2 = conn.cursor()
         cur2.execute("SELECT DISTINCT event_type FROM student_event ORDER BY event_type")
@@ -1649,7 +1650,7 @@ class MainWindow(QWidget):
         layout.addWidget(type_input)
 
         # Note
-        layout.addWidget(QLabel("Note:"))
+        layout.addWidget(QLabel(_('event.edit_note')))
         note_input = QTextEdit()
         note_input.setText(note or '')
         note_input.setMaximumHeight(120)
@@ -1657,7 +1658,7 @@ class MainWindow(QWidget):
 
         # Boutons
         btn_row = QHBoxLayout()
-        save_btn = QPushButton("Enregistrer")
+        save_btn = QPushButton(_('event.save'))
         save_btn.setStyleSheet(
             f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
             f"border: none; border-radius: 6px; padding: 8px 20px; font-weight: bold; }}")
@@ -1665,7 +1666,7 @@ class MainWindow(QWidget):
             cur.execute("UPDATE student_event SET event_type = %s, note = %s WHERE event_id = %s",
                         (type_input.currentText(), note_input.toPlainText().strip(), event_id)),
             conn.commit(), dlg.accept()))
-        cancel_btn = QPushButton("Annuler")
+        cancel_btn = QPushButton(_('event.cancel'))
         cancel_btn.clicked.connect(dlg.reject)
         btn_row.addStretch()
         btn_row.addWidget(save_btn)
@@ -1696,8 +1697,8 @@ class MainWindow(QWidget):
 
     def _delete_event(self, event_id: int):
         reply = QMessageBox.question(
-            self, "Confirmer la suppression",
-            f"Supprimer définitivement l'événement #{event_id} ?",
+            self, _('main.confirm_delete_title'),
+            f"{_('main.confirm_delete_message')} #{event_id} ?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply != QMessageBox.Yes:
             return
@@ -1712,7 +1713,7 @@ class MainWindow(QWidget):
         except Exception as e:
             log(f"_delete_event: {e}")
             conn.rollback()
-            QMessageBox.critical(self, "Erreur", f"Échec de la suppression : {e}")
+            QMessageBox.critical(self, _('common.error'), f"{_('main.error_delete_failed')} : {e}")
 
     def refresh_all(self):
         self._top_bar.update_network()
