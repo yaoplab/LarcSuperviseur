@@ -4,34 +4,28 @@
 
 PySide6 (Qt6) desktop app for student attendance/event supervision.
 Direct psycopg2 PostgreSQL — no ORM, no REST API.
-Windows-only. French UI.
+Windows-only. Bilingual UI (FR/EN via `LARC_LANG` env var).
 
 ## How to run
 
 ```bash
 # From C:\Projets (parent dir), NOT inside LarcSuperviseur/
+set LARC_LANG=fr    # Français (défaut)
+set LARC_LANG=en    # English
 python -m LarcSuperviseur
 ```
 
 Requires `LarcCommon` installed (`pip install -e C:\Projets\LarcCommon`).
 
-`main.py` / `__main__.py` add parent dir to `sys.path`.
-
-## Critical: sibling dependencies
-
-- `eLarcProfPy/` at `C:\Projets\eLarcProfPy/` — `config.ini` (DB creds)
-- `LarcCommon/` at `C:\Projets\LarcCommon/` — shared package (installed via pip)
-- `_find_cfg()` searches `../config.ini` then `../../eLarcProfPy/config.ini`
-
-## Architecture (V1.2 — 22 juin 2026)
+## Architecture (V1.2 — 23 juin 2026)
 
 | Path | Role | Lines |
 |---|---|---|
-| `views/main_window.py` | Orchestrator | ~1620 |
-| `views/top_bar.py` | Top bar UI (date, réseau, thème, périodes) | 193 |
+| `views/main_window.py` | Orchestrator | ~1700 |
+| `views/top_bar.py` | Top bar UI (date, réseau, thème, périodes) | 204 |
 | `views/panels/sidebar.py` | Left nav: programs + classes (Fibonacci) | ~160 |
-| `views/panels/group_panel.py` | Group stats: KPIs, charts, history | ~470 |
-| `views/panels/class_panel.py` | Student cards grid | ~70 |
+| `views/panels/group_panel.py` | Group stats: KPIs, charts, history, absents list | ~500 |
+| `views/panels/class_panel.py` | Student cards grid | 90 |
 | `views/panels/student_detail.py` | Student detail: photo, info, events | ~400 |
 | `views/core/time_manager.py` | Centralized time state (date, period, unit) | 49 |
 | `views/core/data_loader.py` | ALL DB queries (33 methods) | 752 |
@@ -41,6 +35,7 @@ Requires `LarcCommon` installed (`pip install -e C:\Projets\LarcCommon`).
 | `views/dialogs/event_generator.py` | Event creation dialog (DataLoader) | 432 |
 | `views/dialogs/timetable_editor.py` | Timetable editor + TimeSlotGrid (DataLoader) | 209 |
 | `common/*.py` | Shims → `larccommon` package | 1 each |
+| `common/trace.py` | Debug tracing to `trace.log` | 25 |
 
 ## External dependencies
 
@@ -63,15 +58,26 @@ Requires `LarcCommon` installed (`pip install -e C:\Projets\LarcCommon`).
 - Désactivation : supprimer `trace.log`
 - Utilisation : `from LarcSuperviseur.common.trace import trace; trace("mon message")`
 
+## Internationalisation (i18n)
+
+- Système : `larccommon/l10n/` — `Translator` + fichiers `fr.json` / `en.json`
+- Clés : `prefix.section.key` (ex: `kpi.total`, `history.title`, `student.contact.email`)
+- Activation : variable d'env `LARC_LANG=fr` ou `LARC_LANG=en`
+- Initialisation : dans `login.py` via `Translator.instance(lang).load_dir(Translator.l10n_dir())`
+- Usage dans le code : `from larccommon.l10n import _` puis `_("key")`
+- Les 8 vues LarcSuperviseur sont traduites (~200 clés)
+
 ## DB notes
 
 - `student_event`: INSERT-only temporal traces
 - `event_type`: hierarchical paths like "Bureau BI > Violence > Auteur"
 - Old keywords (`absence`, `exit`) still work via `ILIKE`
+- **`ILIKE 'Absence%'` ajouté** dans les 7 requêtes stats pour les nouveaux types `Absence > *`
 - `autocommit = True` on all connections
 - Table `larcauth_type_event`: IDs 100-499, 4+ categories. Fichier SQL perdu
 - **Terme actif** : défini par l'admin dans `larcauth_academicyear.current_term_number`, PAS par les dates
   (`start_date`/`end_date` de `larcauth_term` servent de cadre indicatif)
+- `_load_active_term()` utilise maintenant `academicyear.current_term_number` + `fk_language = 2`
 - Après restauration DB: `python -m LarcSuperviseur.sql.run_ddl`
 
 ## User roles
@@ -84,22 +90,4 @@ Columns: `type_supervisor`, `type_coordonator`, `is_adm`.
 - Ajouter types « Absence justifiée > Maladie/Accident/Vacances » dans la DB (FAIT)
 - Remplir l'emploi du temps T3
 - Interface mobile Flutter (phase ultérieure)
-
-## Notes pour le 23 juin
-
-### Stats absences à corriger
-Les types d'absence ont changé (nouveaux codes type_event : `Absence > Maladie`, etc.).
-Les requêtes ILIKE dans `_load_group_stats`, `_load_students`, `_load_global_history`, `_load_student_detail` utilisent encore les anciens patterns :
-```sql
-se.event_type ILIKE '%absence%'           -- ancien mot-clé
-se.event_type ILIKE 'Suivi > Absence%'    -- ancien chemin
-```
-**Ajouter** `se.event_type ILIKE 'Absence%'` dans toutes ces requêtes.
-
-### Liste des absents
-- Trouver un emplacement pour une **liste des absents par classe** dans la vue groupe
-- Quand on clique sur une classe, afficher une **liste claire des absents** (pas seulement le compteur)
-
-### LarcCommon : filtre langue sur le terme
-La requête de sélection du terme (`larcauth_academicyear` → `larcauth_term`) ne filtre pas par `fk_language`.
-Ajouter `AND t.fk_language = 2` (français) dans les requêtes `get_term_id()`, `get_current_term_label()`, et le login.
+- **Langue préférence utilisateur en DB** : stocker `fk_language` dans `larcauth_aecuser` (per user) + `larcauth_config` (global)
