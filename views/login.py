@@ -13,6 +13,7 @@ from LarcSuperviseur.common.database import db
 from LarcSuperviseur.common.session import session, UserRole, ConnMode
 from LarcSuperviseur.common.logger import log
 from LarcSuperviseur.common.trace import trace
+from larccommon.l10n import Translator, _
 from LarcSuperviseur.common.network import detect_network
 from LarcSuperviseur.common.theme import theme_manager
 from LarcSuperviseur.common.auth import OAuth2Manager
@@ -61,8 +62,13 @@ class LoginWindow(QWidget):
         super().__init__()
         self._worker: Optional[_Worker] = None
         self._tabs_forced = False
-        self.setWindowTitle("LarcSuperviseur \u2014 Connexion")
-        print("[TRACE] LoginWindow.__init__: démarre")
+        import os
+        lang = os.environ.get('LARC_LANG', 'fr')
+        trans = Translator.instance(lang)
+        trans.load_dir(Translator.l10n_dir())
+        trace(f" LoginWindow.__init__: langue={lang}")
+        self.setWindowTitle(_("app.title.superviseur") + " - " + _("login.title"))
+        trace(f" LoginWindow.__init__: démarre")
 
         ok_intra = db.connect_intranet()
         trace(f" LoginWindow.__init__: connect_intranet={ok_intra}")
@@ -229,7 +235,7 @@ class LoginWindow(QWidget):
         email_lbl.setObjectName("formLbl")
         layout.addWidget(email_lbl)
         email = QLineEdit()
-        email.setPlaceholderText("prenom.nom@votreedu.com")
+        email.setPlaceholderText(_("login.email_placeholder"))
         email.setFixedHeight(55)
         self._edt_i_email = email
         layout.addWidget(email)
@@ -241,7 +247,7 @@ class LoginWindow(QWidget):
         layout.addWidget(pwd_lbl)
         pwd = QLineEdit()
         pwd.setEchoMode(QLineEdit.Password)
-        pwd.setPlaceholderText("Mot de passe")
+        pwd.setPlaceholderText(_("login.password_placeholder"))
         pwd.setFixedHeight(55)
         pwd.returnPressed.connect(self._on_intranet)
         self._edt_i_pwd = pwd
@@ -304,7 +310,7 @@ class LoginWindow(QWidget):
         email = self._edt_i_email.text().strip()
         password = self._edt_i_pwd.text()
         if not email or not password:
-            self._show_error("Email et mot de passe requis.")
+            self._show_error(_("login.error.required"))
             return
         try:
             self._check_rate_limit(email.lower())
@@ -318,7 +324,7 @@ class LoginWindow(QWidget):
         trace(f" _on_intranet: connect_intranet={ok}")
         if not ok:
             self._set_busy(False)
-            self._show_error("Impossible de se connecter \u00e0 l'Intranet.")
+            self._show_error(_("login.error.intranet"))
             return
 
         conn = db.server_conn
@@ -334,7 +340,7 @@ class LoginWindow(QWidget):
             row = cur.fetchone()
             if row is None:
                 self._set_busy(False)
-                self._show_error("Utilisateur introuvable.")
+                self._show_error(_("login.error.user_not_found"))
                 db.disconnect_all()
                 return
 
@@ -343,15 +349,14 @@ class LoginWindow(QWidget):
             pass_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
             if pwd_hash and pwd_hash != pass_hash:
                 self._set_busy(False)
-                self._show_error("Mot de passe incorrect.")
+                self._show_error(_("login.error.wrong_password"))
                 db.disconnect_all()
                 return
 
             if not (is_dir or is_coord or is_sup):
                 self._set_busy(False)
                 self._show_error(
-                    "Cette application est r\u00e9serv\u00e9e aux superviseurs, "
-                    "coordinateurs et administrateurs.")
+                    _("login.error.restricted"))
                 db.disconnect_all()
                 return
 
