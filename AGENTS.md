@@ -90,4 +90,4 @@ Columns: `type_supervisor`, `type_coordonator`, `is_adm`.
 - Ajouter types « Absence justifiée > Maladie/Accident/Vacances » dans la DB (FAIT)
 - Remplir l'emploi du temps T3
 - Interface mobile Flutter (phase ultérieure)
-- **Langue préférence utilisateur en DB** : stocker `fk_language` dans `larcauth_aecuser` (per user) + `larcauth_config` (global)
+- Langue préférence utilisateur en DB : stocker `fk_language` dans `larcauth_aecuser` (per user) + `larcauth_config` (global) — permettra de choisir la langue du trimestre affiché
