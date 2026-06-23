@@ -99,3 +99,7 @@ se.event_type ILIKE 'Suivi > Absence%'    -- ancien chemin
 ### Liste des absents
 - Trouver un emplacement pour une **liste des absents par classe** dans la vue groupe
 - Quand on clique sur une classe, afficher une **liste claire des absents** (pas seulement le compteur)
+
+### LarcCommon : filtre langue sur le terme
+La requête de sélection du terme (`larcauth_academicyear` → `larcauth_term`) ne filtre pas par `fk_language`.
+Ajouter `AND t.fk_language = 2` (français) dans les requêtes `get_term_id()`, `get_current_term_label()`, et le login.

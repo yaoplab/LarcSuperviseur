@@ -830,7 +830,7 @@ class MainWindow(QWidget):
             cur.execute(f"""
                 SELECT c.id, c.label,
                        COUNT(DISTINCT se.event_id) AS event_count,
-                       COUNT(DISTINCT CASE WHEN se.event_type = %s OR se.event_type ILIKE %s THEN se.event_id END) AS abs_count,
+                       COUNT(DISTINCT CASE WHEN se.event_type = %s OR se.event_type ILIKE %s OR se.event_type ILIKE %s THEN se.event_id END) AS abs_count,
                        COUNT(DISTINCT CASE WHEN se.event_type = %s OR se.event_type ILIKE %s OR se.event_type ILIKE %s THEN se.event_id END) AS exit_count,
                        COUNT(DISTINCT s.aecuser_ptr_id) AS student_count
                 FROM larcauth_classroom c
@@ -842,7 +842,7 @@ class MainWindow(QWidget):
                 WHERE c.enabled = TRUE {class_filter}
                 GROUP BY c.id, c.label
                 ORDER BY c.label
-            """, ('absence', 'Suivi > Absence%', 'exit', 'Sortie%', '%Fuite%', date_from, date_to))
+            """, ('absence', 'Suivi > Absence%', 'Absence%', 'exit', 'Sortie%', '%Fuite%', date_from, date_to))
 
             rows = cur.fetchall()
 
@@ -953,11 +953,11 @@ class MainWindow(QWidget):
                 JOIN larcauth_classroom c ON c.id = s.s_classroom_id
                 JOIN larcauth_level l ON l.id = c.fk_level_id
                 JOIN larcauth_program p ON p.id = l.fk_program_id
-                WHERE (se.event_type = %s OR se.event_type ILIKE %s)
+                WHERE (se.event_type = %s OR se.event_type ILIKE %s OR se.event_type ILIKE %s)
                   AND c.enabled = TRUE {class_filter}
                   AND DATE(se.event_at) BETWEEN %s AND %s
                 GROUP BY d ORDER BY d
-            """, ('absence', 'Suivi > Absence%', date_from, date_to))
+            """, ('absence', 'Suivi > Absence%', 'Absence%', date_from, date_to))
             trend_rows = cur.fetchall()
             if trend_rows:
                 line = QLineSeries()
@@ -991,7 +991,7 @@ class MainWindow(QWidget):
                     WHERE NOT EXISTS (
                         SELECT 1 FROM student_event se2
                         WHERE se2.student_id = s.aecuser_ptr_id
-                          AND (se2.event_type = %s OR se2.event_type ILIKE %s)
+                          AND (se2.event_type = %s OR se2.event_type ILIKE %s OR se2.event_type ILIKE %s)
                           AND DATE(se2.event_at) BETWEEN %s AND %s
                     )
                 ) AS present,
@@ -999,7 +999,7 @@ class MainWindow(QWidget):
                     WHERE EXISTS (
                         SELECT 1 FROM student_event se3
                         WHERE se3.student_id = s.aecuser_ptr_id
-                          AND (se3.event_type = %s OR se3.event_type ILIKE %s)
+                          AND (se3.event_type = %s OR se3.event_type ILIKE %s OR se3.event_type ILIKE %s)
                           AND DATE(se3.event_at) BETWEEN %s AND %s
                     )
                 ) AS absent
@@ -1008,8 +1008,8 @@ class MainWindow(QWidget):
                 JOIN larcauth_level l ON l.id = c.fk_level_id
                 JOIN larcauth_program p ON p.id = l.fk_program_id
                 WHERE s.enabled = TRUE AND c.enabled = TRUE {class_filter}
-            """, ('absence', 'Suivi > Absence%', date_from, date_to,
-                   'absence', 'Suivi > Absence%', date_from, date_to))
+            """, ('absence', 'Suivi > Absence%', 'Absence%', date_from, date_to,
+                   'absence', 'Suivi > Absence%', 'Absence%', date_from, date_to))
             pres_row = cur.fetchone()
             present_count = pres_row[0] if pres_row else 0
             absent_count = pres_row[1] if pres_row else 0
@@ -1209,14 +1209,14 @@ class MainWindow(QWidget):
                     cur.execute(f"""
                         SELECT se.student_id,
                                COUNT(*) FILTER (WHERE se.event_type = %s OR se.event_type ILIKE %s OR se.event_type ILIKE %s) AS exit_count,
-                               CASE WHEN COUNT(*) FILTER (WHERE (se.event_type = %s
-                                   OR se.event_type ILIKE %s)
-                                   AND se.validated_by IS NULL) > 0 THEN 'Absent' ELSE 'Présent' END AS presence
-                        FROM student_event se
-                        WHERE se.student_id IN ({ids_sql})
-                           AND DATE(se.event_at) BETWEEN %s AND %s
-                        GROUP BY se.student_id
-                    """, ('exit', 'Sortie%', '%Fuite%', 'absence', 'Suivi > Absence%', today, today))
+                                CASE WHEN COUNT(*) FILTER (WHERE (se.event_type = %s
+                                    OR se.event_type ILIKE %s OR se.event_type ILIKE %s)
+                                    AND se.validated_by IS NULL) > 0 THEN 'Absent' ELSE 'Présent' END AS presence
+                         FROM student_event se
+                         WHERE se.student_id IN ({ids_sql})
+                            AND DATE(se.event_at) BETWEEN %s AND %s
+                         GROUP BY se.student_id
+                     """, ('exit', 'Sortie%', '%Fuite%', 'absence', 'Suivi > Absence%', 'Absence%', today, today))
                     for sid, exit_count, presence in cur.fetchall():
                         event_stats[sid] = {'exit': exit_count, 'presence': presence}
                 except Exception:
@@ -1368,12 +1368,12 @@ class MainWindow(QWidget):
             # -- KPIs --
             cur.execute("""
                 SELECT
-                    COUNT(*) FILTER (WHERE event_type = %s OR event_type ILIKE %s) AS abs_count,
+                    COUNT(*) FILTER (WHERE event_type = %s OR event_type ILIKE %s OR event_type ILIKE %s) AS abs_count,
                     COUNT(*) FILTER (WHERE event_type = %s OR event_type ILIKE %s OR event_type ILIKE %s) AS exit_count,
                     COUNT(*) AS total
                 FROM student_event
                 WHERE student_id = %s AND DATE(event_at) BETWEEN %s AND %s
-            """, ('absence', 'Suivi > Absence%', 'exit', 'Sortie%', '%Fuite%', student_id, date_from, date_to))
+            """, ('absence', 'Suivi > Absence%', 'Absence%', 'exit', 'Sortie%', '%Fuite%', student_id, date_from, date_to))
             kpi = cur.fetchone()
             abs_count, exit_count, total = kpi if kpi else (0, 0, 0)
             self._sd_kpis['abs'].setText(str(abs_count))
@@ -1392,10 +1392,10 @@ class MainWindow(QWidget):
             cur.execute("""
                 SELECT DATE(event_at) AS d, COUNT(*) AS cnt
                 FROM student_event
-                WHERE student_id = %s AND (event_type = %s OR event_type ILIKE %s)
+                WHERE student_id = %s AND (event_type = %s OR event_type ILIKE %s OR event_type ILIKE %s)
                   AND DATE(event_at) BETWEEN %s AND %s
                 GROUP BY d ORDER BY d
-            """, (student_id, 'absence', 'Suivi > Absence%', term_start, term_end))
+            """, (student_id, 'absence', 'Suivi > Absence%', 'Absence%', term_start, term_end))
             trend = cur.fetchall()
 
             if trend:
