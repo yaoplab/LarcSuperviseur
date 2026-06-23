@@ -209,7 +209,24 @@ class MainWindow(QWidget):
             kpi_row.addWidget(card)
         group_layout.addLayout(kpi_row)
 
-        # -- Historique événements (juste après les KPIs) --
+
+        # -- Liste des absents (apres KPIs, avant historique) --
+        self._absents_group = QFrame()
+        self._absents_group.setObjectName("panel")
+        absents_layout = QVBoxLayout(self._absents_group)
+        absents_title = QLabel("<b>Absents</b>")
+        absents_title.setObjectName("panel_title")
+        absents_layout.addWidget(absents_title)
+        self._absents_table = QTableWidget()
+        self._absents_table.setColumnCount(3)
+        self._absents_table.setHorizontalHeaderLabels(["Nom", "Classe", "Motif"])
+        self._absents_table.horizontalHeader().setStretchLastSection(True)
+        self._absents_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self._absents_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self._absents_table.setMaximumHeight(200)
+        absents_layout.addWidget(self._absents_table)
+        self._absents_group.setVisible(False)
+        group_layout.addWidget(self._absents_group)
         self._history_group = QFrame()
         self._history_group.setObjectName("panel")
         self._history_layout = QVBoxLayout(self._history_group)
@@ -379,6 +396,24 @@ class MainWindow(QWidget):
         self._tt_edit_btn.clicked.connect(self._on_edit_timetable)
         header_row.addWidget(self._tt_edit_btn)
         cards_frame_layout.addLayout(header_row)
+
+        self._class_absents_group = QFrame()
+        self._class_absents_group.setObjectName("panel")
+        cal = QVBoxLayout(self._class_absents_group)
+        cal.setContentsMargins(8, 4, 8, 4)
+        cal_title = QLabel("<b>Absents du jour</b>")
+        cal_title.setStyleSheet("font-size: 13px; font-weight: bold;")
+        cal.addWidget(cal_title)
+        self._class_absents_table = QTableWidget()
+        self._class_absents_table.setColumnCount(2)
+        self._class_absents_table.setHorizontalHeaderLabels(["Nom", "Motif"])
+        self._class_absents_table.horizontalHeader().setStretchLastSection(True)
+        self._class_absents_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self._class_absents_table.setMaximumHeight(150)
+        cal.addWidget(self._class_absents_table)
+        self._class_absents_group.setVisible(False)
+        cards_frame_layout.addWidget(self._class_absents_group)
+
         cards_frame_layout.addWidget(self._cards_scroll)
         self._class_stack.addWidget(cards_frame)  # index 0
 
@@ -858,6 +893,33 @@ class MainWindow(QWidget):
             self._kpi_cards['absent'].setText(str(total_abs))
             self._kpi_cards['exit'].setText(str(total_exits))
 
+            # --- Liste des absents ---
+            self._absents_group.setVisible(total_abs > 0 and self._absents_table.rowCount() > 0)
+            if total_abs > 0:
+                cur.execute(f"""
+                    SELECT aec.last_name || ' ' || aec.first_name AS name,
+                           c.label AS class_label, se.event_type
+                    FROM student_event se
+                    JOIN larcauth_student s ON s.aecuser_ptr_id = se.student_id
+                    JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id
+                    JOIN larcauth_classroom c ON c.id = s.s_classroom_id
+                    JOIN larcauth_level l ON l.id = c.fk_level_id
+                    JOIN larcauth_program p ON p.id = l.fk_program_id
+                    WHERE (se.event_type = %s OR se.event_type ILIKE %s OR se.event_type ILIKE %s)
+                      AND DATE(se.event_at) BETWEEN %s AND %s
+                      AND se.validated_by IS NULL
+                      AND c.enabled = TRUE {class_filter}
+                    ORDER BY c.label, aec.last_name
+                    LIMIT 50
+                """, ('absence', 'Suivi > Absence%', 'Absence%', date_from, date_to))
+                abs_rows = cur.fetchall()
+                self._absents_table.setRowCount(len(abs_rows))
+                for i, (name, cls, motif) in enumerate(abs_rows):
+                    self._absents_table.setItem(i, 0, QTableWidgetItem(name))
+                    self._absents_table.setItem(i, 1, QTableWidgetItem(cls))
+                    self._absents_table.setItem(i, 2, QTableWidgetItem(motif))
+                self._absents_group.setVisible(True)
+
             # --- Table ---
             self._stats_table.setRowCount(len(rows))
             self._stats_table.setColumnCount(5)
@@ -1245,6 +1307,30 @@ class MainWindow(QWidget):
                 card.set_absent(is_absent)
                 card.clicked.connect(self._on_student_selected)
                 self._cards_layout.addWidget(card, idx // cols, idx % cols, Qt.AlignCenter)
+
+            # --- Absents du jour pour cette classe ---
+            try:
+                cur.execute("""
+                    SELECT aec.last_name || ' ' || aec.first_name AS name, se.event_type
+                    FROM student_event se
+                    JOIN larcauth_student s ON s.aecuser_ptr_id = se.student_id
+                    JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id
+                    WHERE s.s_classroom_id = %s
+                      AND (se.event_type = %s OR se.event_type ILIKE %s OR se.event_type ILIKE %s)
+                      AND DATE(se.event_at) = %s
+                      AND se.validated_by IS NULL
+                    ORDER BY aec.last_name
+                    LIMIT 30
+                """, (class_id, 'absence', 'Suivi > Absence%', 'Absence%', today))
+                abs_rows = cur.fetchall()
+                self._class_absents_table.setRowCount(len(abs_rows))
+                for i, (name, motif) in enumerate(abs_rows):
+                    self._class_absents_table.setItem(i, 0, QTableWidgetItem(name))
+                    self._class_absents_table.setItem(i, 1, QTableWidgetItem(motif))
+                self._class_absents_group.setVisible(bool(abs_rows))
+            except Exception:
+                self._class_absents_group.setVisible(False)
+
             self._top_bar.set_loading(False)
 
         except Exception as e:
