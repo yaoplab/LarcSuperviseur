@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QMenu, QButtonGroup,
 )
-from PySide6.QtCore import QTimer, QCoreApplication
+from PySide6.QtCore import Qt, QTimer, QCoreApplication
 from PySide6.QtGui import QPixmap, QPainter, QColor, QIcon
 
 from LarcSuperviseur.common.theme import theme_manager
