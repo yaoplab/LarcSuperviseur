@@ -366,6 +366,18 @@ class LoginWindow(QWidget):
             elif is_coord: role = UserRole.COORD
             else: role = UserRole.SUPERVISEUR
 
+            import os
+            # Lire la langue preferee de l'utilisateur
+            user_lang = 'fr'
+            try:
+                cur.execute("SELECT fk_language FROM larcauth_aecuser WHERE id = %s", (user_id,))
+                r = cur.fetchone()
+                if r and r[0] == 1: user_lang = 'en'
+            except: pass
+            lang = os.environ.get('LARC_LANG', user_lang)
+            trans = Translator.instance(lang)
+            trans.reload(Translator.l10n_dir())
+
             session.user_id = user_id
             session.email = email
             session.full_name = f"{first_name} {last_name}"
