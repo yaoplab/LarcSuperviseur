@@ -73,19 +73,18 @@ class TopBar(QFrame):
         row1.addWidget(self._theme_btn)
 
         # Bouton profil (initiales)
-        from LarcSuperviseur.common.session import session
-        initials = ''.join(w[0].upper() for w in session.full_name.split() if w)[:2] or '?'
-        self._profile_btn = QPushButton(initials)
+        self._profile_btn = QPushButton("?")
         self._profile_btn.setFixedSize(34, 34)
         self._profile_btn.setCursor(Qt.PointingHandCursor)
-        p = theme_manager.palette
         self._profile_btn.setStyleSheet(
             f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
             f"font-weight: bold; font-size: 13px; border: none; border-radius: 17px; }}"
             f"QPushButton:hover {{ background: {p.active}; }}"
         )
+        self.update_profile()
         self._profile_menu = QMenu(self)
-        self._profile_menu.addAction("Pr\u00e9f\u00e9rences")
+        prefs_action = self._profile_menu.addAction("Pr\u00e9f\u00e9rences")
+        prefs_action.triggered.connect(self._on_preferences)
         self._profile_menu.addSeparator()
         logout_action = self._profile_menu.addAction("D\u00e9connexion")
         logout_action.triggered.connect(self._on_logout)
@@ -212,6 +211,15 @@ class TopBar(QFrame):
 
     def _on_logout(self):
         QCoreApplication.quit()
+
+    def _on_preferences(self):
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.information(self, "Pr\u00e9f\u00e9rences", "Dialogue pr\u00e9f\u00e9rences \u00e0 impl\u00e9menter.")
+
+    def update_profile(self):
+        from LarcSuperviseur.common.session import session
+        initials = ''.join(w[0].upper() for w in session.full_name.split() if w)[:2] or '?'
+        self._profile_btn.setText(initials)
 
     # ── Réapplication du style après changement de thème ────────────────
 
