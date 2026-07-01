@@ -412,6 +412,21 @@ class EventGenerator(QDialog):
         if not self._selected_type_path:
             QMessageBox.warning(self, _("common.dialog.error_title"), _("event.select_type_required"))
             return
+        # Verifier date vs agenda
+        evt_date = self._date_edit.date()
+        evt_str = evt_date.toString('yyyy-MM-dd')
+        try:
+            cur = db.server_conn.cursor()
+            cur.execute("SELECT MAX(date_all) FROM agenda")
+            r = cur.fetchone()
+            if r and r[0]:
+                last_date = str(r[0])[:10]
+                if evt_str > last_date:
+                    QMessageBox.warning(self, _("common.dialog.error_title"),
+                                        f"Date hors calendrier scolaire ({last_date}). Année terminée.")
+                    return
+        except Exception:
+            pass
         self.accept()
 
     def get_data(self) -> dict:
