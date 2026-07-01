@@ -210,6 +210,9 @@ class TopBar(QFrame):
         if key:
             self._on_theme_change(key)
 
+    def _on_logout(self):
+        QCoreApplication.quit()
+
     # ── Réapplication du style après changement de thème ────────────────
 
     def restyle(self):
