@@ -307,9 +307,11 @@ class LoginWindow(QWidget):
         return w
 
     def _on_intranet(self):
+        trace(f"_on_intranet: START")
         email = self._edt_i_email.text().strip()
         password = self._edt_i_pwd.text()
         if not email or not password:
+            trace(f"_on_intranet: email or password empty")
             self._show_error(_("login.error.required"))
             return
         try:

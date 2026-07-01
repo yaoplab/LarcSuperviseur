@@ -286,7 +286,7 @@ class EventGenerator(QDialog):
         self._matiere_group_widget.setVisible(visible)
 
     def _update_source_label(self):
-        intranet_ok, _ = detect_network()
+        intranet_ok, _ignore = detect_network()
         p = theme_manager.palette
         s = theme_manager.font_size
         if intranet_ok and db.is_server_connected:

@@ -672,7 +672,7 @@ class MainWindow(QWidget):
             grd.setSpacing(8)
 
             for col_idx, (hdr_text, prog_key) in enumerate(columns):
-                fg, bg, on_fg, _ = prog_style[prog_key]
+                fg, bg, on_fg, prog_label = prog_style[prog_key]
                 items = groups.get(prog_key, [])
 
                 col_hdr = _make_btn(
