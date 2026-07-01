@@ -72,6 +72,26 @@ class TopBar(QFrame):
         self._theme_btn.setMenu(self._theme_menu)
         row1.addWidget(self._theme_btn)
 
+        # Bouton profil (initiales)
+        from LarcSuperviseur.common.session import session
+        initials = ''.join(w[0].upper() for w in session.full_name.split() if w)[:2] or '?'
+        self._profile_btn = QPushButton(initials)
+        self._profile_btn.setFixedSize(34, 34)
+        self._profile_btn.setCursor(Qt.PointingHandCursor)
+        p = theme_manager.palette
+        self._profile_btn.setStyleSheet(
+            f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
+            f"font-weight: bold; font-size: 13px; border: none; border-radius: 17px; }}"
+            f"QPushButton:hover {{ background: {p.active}; }}"
+        )
+        self._profile_menu = QMenu(self)
+        self._profile_menu.addAction("Pr\u00e9f\u00e9rences")
+        self._profile_menu.addSeparator()
+        logout_action = self._profile_menu.addAction("D\u00e9connexion")
+        logout_action.triggered.connect(self._on_logout)
+        self._profile_btn.setMenu(self._profile_menu)
+        row1.addWidget(self._profile_btn)
+
         self._loading_label = QLabel()
         self._loading_label.setStyleSheet(f"font-size: 13px; color: {p.primary}; font-weight: bold;")
         self._loading_label.setVisible(False)
@@ -194,6 +214,11 @@ class TopBar(QFrame):
 
     def restyle(self):
         p = theme_manager.palette
+        self._profile_btn.setStyleSheet(
+            f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
+            f"font-weight: bold; font-size: 13px; border: none; border-radius: 17px; }}"
+            f"QPushButton:hover {{ background: {p.active}; }}"
+        )
         self._date_label.setStyleSheet(
             f"font-size: 21px; font-weight: bold; color: {p.text_strong};")
         self._time_label.setStyleSheet(
