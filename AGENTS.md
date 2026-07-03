@@ -85,8 +85,20 @@ Requires `LarcCommon` installed (`pip install -e C:\Projets\LarcCommon`).
 SUPERVISEUR (write), COORD (write + validate), ADMIN (full).
 Columns: `type_supervisor`, `type_coordonator`, `is_adm`.
 
+## LarcHub — Décision architecture (02/07/2026)
+
+**Hub LarcAdmin** (1 .exe) : Supervision + Secrétariat + Coordination (futur)
+- Connexion directe PostgreSQL (intranet/cloud)
+- Fenêtre unique après login, barre latérale avec sections (invisible/grisé/actif)
+- Chaque dépôt reste indépendant pour l'évolution des vues
+
+**eLarcProfPy** : reste séparé (architecture SQLite locale + sync trop différente)
+
 ## Next
 
+- Créer `LarcHub/` (nouveau dépôt ou dans LarcSuperviseur ?)
+- `hub_window.py` : barre latérale + QStackedWidget + états rôle/connexion
+- Importer les vues de LarcSuperviseur et LarcSecretaire
 - Ajouter types « Absence justifiée > Maladie/Accident/Vacances » dans la DB (FAIT)
 - Remplir l'emploi du temps T3
 - Interface mobile Flutter (phase ultérieure)

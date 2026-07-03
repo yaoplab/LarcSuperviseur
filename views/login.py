@@ -368,12 +368,13 @@ class LoginWindow(QWidget):
 
             import os
             # Lire la langue preferee de l'utilisateur
-            user_lang = 'fr'
+            user_lang_id = 2
             try:
                 cur.execute("SELECT fk_language FROM larcauth_aecuser WHERE id = %s", (user_id,))
                 r = cur.fetchone()
-                if r and r[0] == 1: user_lang = 'en'
+                if r: user_lang_id = int(r[0])
             except: pass
+            user_lang = 'en' if user_lang_id == 1 else 'fr'
             lang = os.environ.get('LARC_LANG', user_lang)
             trans = Translator.instance(lang)
             trans.reload(Translator.l10n_dir())
@@ -384,6 +385,7 @@ class LoginWindow(QWidget):
             session.role = role
             session.conn_mode = ConnMode.INTRANET
             session.is_authenticated = True
+            session.fk_language = user_lang_id
 
             try:
                 cur.execute("""
@@ -441,6 +443,7 @@ class LoginWindow(QWidget):
         session.is_authenticated = True
         session.term_id = res.term_id
         session.term_label = res.term_label
+        session.fk_language = res.fk_language
 
         log(f"Connexion Cloud : {session.full_name} ({res.role.value})")
         self._open_main_window()

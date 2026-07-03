@@ -35,10 +35,11 @@ class TopBar(QFrame):
         outer.setContentsMargins(10, 6, 10, 6)
         outer.setSpacing(4)
         p = theme_manager.palette
+        d = theme_manager.design
 
         # Ligne 1 -------------------------------------------------------
         row1 = QHBoxLayout()
-        row1.setSpacing(8)
+        row1.setSpacing(d.radius_lg)
 
         self._date_label = QLabel()
         self._date_label.setStyleSheet(f"font-size: 21px; font-weight: bold; color: {p.text_strong};")
@@ -98,7 +99,7 @@ class TopBar(QFrame):
 
         # Ligne 2 : 5 fixes + slot unités + espacement + refresh ---------
         self._period_row = QHBoxLayout()
-        self._period_row.setSpacing(6)
+        self._period_row.setSpacing(d.spacing)
         self._period_group = QButtonGroup(self)
         self._period_group.setExclusive(True)
         self._period_keys: list[str] = []
@@ -116,7 +117,7 @@ class TopBar(QFrame):
 
         # Slot pour les unités (inséré entre les fixes et le spacer)
         self._unit_slot = QHBoxLayout()
-        self._unit_slot.setSpacing(6)
+        self._unit_slot.setSpacing(d.spacing)
         self._period_row.addLayout(self._unit_slot)
 
         self._period_row.addSpacing(13)
@@ -213,8 +214,19 @@ class TopBar(QFrame):
         QCoreApplication.quit()
 
     def _on_preferences(self):
-        from PySide6.QtWidgets import QMessageBox
-        QMessageBox.information(self, "Pr\u00e9f\u00e9rences", "Dialogue pr\u00e9f\u00e9rences \u00e0 impl\u00e9menter.")
+        from LarcSuperviseur.views.dialogs.preferences import PreferencesDialog
+        from LarcSuperviseur.common.session import session
+        old_theme = theme_manager.active_name
+        old_card = session.card_theme
+        dlg = PreferencesDialog(self)
+        if dlg.exec():
+            theme_changed = session.theme_pref != old_theme
+            card_changed = session.card_theme != old_card
+            if theme_changed:
+                self._on_theme_change(session.theme_pref)
+            self.update_profile()
+            if card_changed:
+                self._on_refresh()
 
     def update_profile(self):
         from LarcSuperviseur.common.session import session
@@ -225,17 +237,18 @@ class TopBar(QFrame):
 
     def restyle(self):
         p = theme_manager.palette
+        s = theme_manager.font_size
         self._profile_btn.setStyleSheet(
             f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
-            f"font-weight: bold; font-size: 13px; border: none; border-radius: 17px; }}"
+            f"font-weight: bold; font-size: {s(13)}px; border: none; border-radius: 17px; }}"
             f"QPushButton:hover {{ background: {p.active}; }}"
         )
         self._date_label.setStyleSheet(
-            f"font-size: 21px; font-weight: bold; color: {p.text_strong};")
+            f"font-size: {s(21)}px; font-weight: bold; color: {p.text_strong};")
         self._time_label.setStyleSheet(
-            f"font-size: 21px; font-weight: bold; color: {p.primary};")
+            f"font-size: {s(21)}px; font-weight: bold; color: {p.primary};")
         self._term_label.setStyleSheet(
-            f"font-size: 13px; color: {p.text_soft}; padding-left: 13px;")
+            f"font-size: {s(13)}px; color: {p.text_soft}; padding-left: 13px;")
         self._loading_label.setStyleSheet(
-            f"font-size: 13px; color: {p.primary}; font-weight: bold;")
+            f"font-size: {s(13)}px; color: {p.primary}; font-weight: bold;")
         self._update_network_label()

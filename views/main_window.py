@@ -16,7 +16,7 @@ from LarcSuperviseur.common.database import db
 from LarcSuperviseur.common.session import session
 from LarcSuperviseur.common.logger import log
 from LarcSuperviseur.common.network import detect_network
-from LarcSuperviseur.common.theme import theme_manager
+from LarcSuperviseur.common.theme import theme_manager, QssHelper
 from LarcSuperviseur.common.photos import get_photo_path
 from LarcSuperviseur.views.core.time_manager import TimeManager
 from LarcSuperviseur.views.top_bar import TopBar
@@ -39,85 +39,67 @@ class MainWindow(QWidget):
     @property
     def _STYLE(self) -> str:
         p = theme_manager.palette
-        f = theme_manager.fonts
+        d = theme_manager.design
         s = theme_manager.font_size
         return f"""
-            QFrame#top_bar {{
-                background: {p.surface}; border: 1px solid {p.outline_variant};
-                border-radius: 6px;
-            }}
-            QFrame#panel {{
-                background: {p.surface}; border: 1px solid {p.outline_variant};
-                border-radius: 6px;
-            }}
-            QLabel#panel_title {{
-                font-size: {s(f.title)}px; font-weight: bold; padding: 4px;
-                color: {p.text_strong};
-            }}
-            QTableWidget {{
-                background: {p.surface}; color: {p.text_strong};
-                gridline-color: {p.outline_variant};
-                border: none; font-size: {s(f.base)}px;
-            }}
-            QTableWidget::item {{
-                padding: 2px 6px;
-            }}
-            QHeaderView::section {{
-                background: {p.surface_variant}; color: {p.text_strong};
-                padding: 4px; border: none; font-weight: bold; font-size: {s(f.small)}px;
-            }}
-            QComboBox {{
-                background: {p.surface}; color: {p.text_strong};
-                border: 1px solid {p.outline_variant}; border-radius: 4px;
-                padding: 4px 8px; font-size: {s(f.base)}px;
-            }}
-            QComboBox:hover {{
-                border-color: {p.primary};
-            }}
-            QComboBox::drop-down {{
-                border: none; width: 20px;
-            }}
-            QPushButton {{
-                background: {p.surface}; color: {p.primary};
-                border: 1px solid {p.outline_variant}; border-radius: 4px;
-                padding: 4px 12px; font-size: {s(f.button)}px;
-            }}
-            QPushButton:hover {{
-                background: {p.primary_container}; border-color: {p.primary};
-            }}
-            QPushButton:pressed {{
-                background: {p.primary}; color: {p.on_primary};
-            }}
+            {QssHelper.top_bar(p, d)}
+            {QssHelper.panel(p, d)}
+            {QssHelper.panel_title(p, s, 14)}
+            {QssHelper.table(p, d, s)}
+            {QssHelper.combobox(p, d)}
+            {QssHelper.push_button(p, d, s)}
+            {QssHelper.section_btn(p, d, s)}
+            {QssHelper.class_btn(p, d, s)}
+            {QssHelper.period_btn(p, d)}
+            {QssHelper.kpi_common(p, d, s)}
+            {QssHelper.phi_btn(p, d)}
             QPushButton#theme_btn {{
                 background: transparent; border: none; font-size: 18px;
             }}
-            QPushButton#section_btn {{
-                background: transparent; border: none; font-weight: bold;
-                text-align: left; padding: 2px 4px; font-size: {s(f.base)}px;
-            }}
-            QPushButton#class_btn {{
-                border: none; border-radius: 4px; text-align: left;
-                padding: 3px 8px; font-size: {s(f.small)}px;
-            }}
-            QPushButton#class_btn:hover {{
-                background: {p.primary_container};
-            }}
-            QPushButton#class_btn:checked {{
-                font-weight: bold;
-            }}
-            QPushButton#period_btn {{
-                min-width: 89px; max-width: 89px; height: 34px;
-                font-size: {s(13)}px; font-weight: normal;
-                border: 2px solid transparent; border-radius: 4px;
-                padding: 0;
+            QPushButton#tt_btn {{
                 background: {p.surface_variant}; color: {p.text_strong};
+                border: none; border-radius: {d.radius}px; padding: {d.field_pad_v}px {d.field_pad_h}px;
+                font-size: {s(10)}px;
             }}
-            QPushButton#period_btn:hover {{
-                background: {p.primary_container}; border-color: {p.primary};
-            }}
-            QPushButton#period_btn:checked {{
+            QPushButton#tt_btn:hover {{
                 background: {p.primary}; color: {p.on_primary};
-                border: 2px solid {p.primary}; font-weight: bold;
+            }}
+            QLabel#kpi_small_value {{
+                font-size: {s(18)}px; font-weight: bold; color: {p.primary};
+            }}
+            QLabel#kpi_small_label {{
+                font-size: {s(9)}px; color: {p.text_soft};
+            }}
+            QLabel#sd_photo {{
+                background: {p.surface_variant}; border-radius: {d.radius_lg}px;
+            }}
+            QLabel#sd_contact_value {{
+                font-size: {s(13)}px; color: {p.text_soft}; padding-left: {d.radius_lg}px;
+            }}
+            QLabel#sd_contact_label {{
+                font-size: {s(13)}px; color: {p.text_strong};
+            }}
+            QPushButton#sd_back {{
+                background: transparent; color: {p.primary};
+                border: none; font-weight: bold;
+                font-size: {s(11)}px; padding: {d.btn_sm_pad_v}px {d.spacing}px;
+            }}
+            QPushButton#sd_back:hover {{
+                color: {p.active};
+            }}
+            QPushButton#sd_add_event {{
+                background: {p.primary}; color: {p.on_primary};
+                border: none; border-radius: {d.radius_xl}px; font-weight: bold;
+                font-size: {s(28)}px;
+            }}
+            QPushButton#sd_add_event:hover {{
+                background: {p.active};
+            }}
+            QLabel#sd_placeholder {{
+                color: {p.text_disabled}; font-size: {s(14)}px;
+            }}
+            QLabel#sd_class {{
+                color: {p.text_soft}; font-size: {s(11)}px;
             }}
         """
 
@@ -143,6 +125,7 @@ class MainWindow(QWidget):
 
     def _init_ui(self):
         self.setStyleSheet(self._STYLE)
+        d = theme_manager.design
         outer = QVBoxLayout()
         outer.setContentsMargins(6, 6, 6, 6)
         outer.setSpacing(6)
@@ -157,6 +140,7 @@ class MainWindow(QWidget):
 
         # -- Main area (sidebar + content) ------------------------------------
         main_h = QHBoxLayout()
+        main_h.setContentsMargins(0, 0, 0, 0)
         main_h.setSpacing(6)
 
         # Sidebar gauche
@@ -189,20 +173,13 @@ class MainWindow(QWidget):
             card = QFrame()
             card.setObjectName("kpi_card")
             card.setFixedHeight(80)
-            card.setStyleSheet(
-                f"QFrame#kpi_card {{ background: {theme_manager.palette.surface_variant}; "
-                f"border-radius: 8px; padding: 4px; }}")
             cl = QVBoxLayout(card)
             cl.setContentsMargins(8, 4, 8, 4)
             val = QLabel("—")
             val.setObjectName("kpi_value")
-            val.setStyleSheet(
-                f"font-size: {theme_manager.font_size(24)}px; font-weight: bold; "
-                f"color: {theme_manager.palette.primary};")
             val.setAlignment(Qt.AlignCenter)
             lbl = QLabel(label)
-            lbl.setStyleSheet(
-                f"font-size: {theme_manager.font_size(10)}px; color: {theme_manager.palette.text_soft};")
+            lbl.setObjectName("kpi_label")
             lbl.setAlignment(Qt.AlignCenter)
             cl.addWidget(val)
             cl.addWidget(lbl)
@@ -367,32 +344,20 @@ class MainWindow(QWidget):
         # Boutons thèmes Phi
         self._phi_group = QButtonGroup(self)
         self._phi_group.setExclusive(True)
-        self._card_theme: str = 'medium'
-        for key, label in [('compact', '▱'), ('medium', '▰'), ('large', '▣')]:
+        self._card_theme: str = session.card_theme
+        for key, label in [('compact', '□'), ('medium', '▣'), ('large', '■')]:
             btn = QPushButton(label)
+            btn.setObjectName("phi_btn")
             btn.setCheckable(True)
             btn.setFixedSize(34, 34)
             btn.setToolTip(f"{_('student.phi_theme')} {key.capitalize()}")
-            btn.setStyleSheet(
-                f"QPushButton {{ font-size: 16px; border: 1px solid {theme_manager.palette.outline_variant}; "
-                f"border-radius: 4px; background: {theme_manager.palette.surface_variant}; "
-                f"color: {theme_manager.palette.text_strong}; }}"
-                f"QPushButton:checked {{ background: {theme_manager.palette.primary}; "
-                f"color: {theme_manager.palette.on_primary}; border: 2px solid {theme_manager.palette.primary}; }}"
-            )
             self._phi_group.addButton(btn)
             btn.clicked.connect(lambda checked, k=key: self._on_card_theme(k))
-            if key == 'medium':
+            if key == session.card_theme:
                 btn.setChecked(True)
             header_row.addWidget(btn)
         self._tt_edit_btn = QPushButton(f"🕐 {_('student.timetable')}")
-        self._tt_edit_btn.setStyleSheet(
-            f"QPushButton {{ background: {theme_manager.palette.surface_variant}; "
-            f"color: {theme_manager.palette.text_strong}; border: none; "
-            f"border-radius: 4px; padding: 4px 8px; "
-            f"font-size: {theme_manager.font_size(10)}px; }}"
-            f"QPushButton:hover {{ background: {theme_manager.palette.primary}; "
-            f"color: {theme_manager.palette.on_primary}; }}")
+        self._tt_edit_btn.setObjectName("tt_btn")
         self._tt_edit_btn.setCursor(Qt.PointingHandCursor)
         self._tt_edit_btn.clicked.connect(self._on_edit_timetable)
         header_row.addWidget(self._tt_edit_btn)
@@ -620,14 +585,23 @@ class MainWindow(QWidget):
             self._student_detail.hide()
 
     def _build_sidebar(self):
+        self._selected_btn = None
         layout = self._sidebar_layout
-        for i in reversed(range(layout.count())):
-            w = layout.itemAt(i).widget()
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
             if w:
                 w.deleteLater()
+            if item.layout():
+                while item.layout().count():
+                    child = item.layout().takeAt(0)
+                    cw = child.widget()
+                    if cw:
+                        cw.deleteLater()
 
         p = theme_manager.palette
         s = theme_manager.font_size
+        d = theme_manager.design
         prog_style = {
             'PEI':  (p.primary, p.primary_container, p.on_primary, 'PEI'),
             'MYP':  (p.secondary, p.secondary_container, p.on_secondary, 'MYP'),
@@ -641,21 +615,19 @@ class MainWindow(QWidget):
                 groups[sigle].append((cid, label))
         trace(f" _build_sidebar: classes={len(self._classes)}, groups={ {k:len(v) for k,v in groups.items()} }")
 
-        def _make_btn(ss, min_h=32):
+        def _make_btn(ss, min_h=34):
             b = QPushButton()
             b.setMinimumHeight(min_h)
             b.setStyleSheet(ss)
             b.setCursor(Qt.PointingHandCursor)
             return b
 
-        # Sections : Collège (PEI | MYP), Lycée (DP | DPEn)
         sections = [
             (_('sidebar.section_college'), [('PEI', 'PEI'), ('MYP', 'MYP')]),
             (_('sidebar.section_lycee'),   [('DP', 'DPFr'), ('DPEn', 'DPEn')]),
         ]
 
         for sec_name, columns in sections:
-            # Section header
             sec_hdr = _make_btn(
                 f"QPushButton {{ background: transparent; color: {p.text_strong}; "
                 f"border: none; border-bottom: 2px solid {p.outline_variant}; "
@@ -667,9 +639,8 @@ class MainWindow(QWidget):
             sec_hdr.clicked.connect(lambda checked, sn=sec_name: self._on_section_clicked(sn))
             layout.addWidget(sec_hdr)
 
-            # Mini-grille 2 colonnes pour cette section
             grd = QGridLayout()
-            grd.setSpacing(8)
+            grd.setSpacing(d.spacing)
 
             for col_idx, (hdr_text, prog_key) in enumerate(columns):
                 fg, bg, on_fg, prog_label = prog_style[prog_key]
@@ -677,7 +648,7 @@ class MainWindow(QWidget):
 
                 col_hdr = _make_btn(
                     f"QPushButton {{ background: {fg}; color: {on_fg}; border: none; "
-                    f"border-radius: 4px; font-weight: bold; font-size: {s(13)}px; padding: 3px; }}"
+                    f"border-radius: {d.radius}px; font-weight: bold; font-size: {s(13)}px; padding: 3px; }}"
                     f"QPushButton:hover {{ opacity: 0.8; }}",
                     min_h=21
                 )
@@ -688,21 +659,23 @@ class MainWindow(QWidget):
                 for i, (cid, label) in enumerate(items):
                     btn = _make_btn(
                         f"QPushButton {{ background: {bg}; color: {fg}; border: none; "
-                        f"border-radius: 4px; font-size: {s(13)}px; padding: 2px; }}"
-                        f"QPushButton:hover {{ background: {fg}; color: {bg}; }}",
+                        f"border-radius: {d.radius}px; font-size: {s(13)}px; padding: 2px; }}"
+                        f"QPushButton:hover {{ background: {fg}; color: {bg}; }}"
+                        f"QPushButton:checked {{ background: {fg}; color: {bg}; "
+                        f"border: 2px solid {fg}; }}",
                         min_h=34
                     )
+                    btn.setCheckable(True)
                     btn.setText(label)
                     btn.clicked.connect(lambda checked, c=cid, l=label, b=btn: self._on_class_clicked(c, l, b))
                     grd.addWidget(btn, i + 1, col_idx)
 
             layout.addLayout(grd)
-            layout.addSpacing(8)
+            layout.addSpacing(d.spacing)
 
-        # Toutes les classes
         self._all_btn = _make_btn(
             f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
-            f"border: none; border-radius: 6px; font-weight: bold; font-size: {s(21)}px; }}"
+            f"border: none; border-radius: {d.radius}px; font-weight: bold; font-size: {s(21)}px; }}"
             f"QPushButton:hover {{ background: {p.active}; }}",
             min_h=55
         )
@@ -744,11 +717,17 @@ class MainWindow(QWidget):
         trace(f" _on_all_clicked: terminé")
 
     def _select_btn(self, btn: QPushButton | None):
-        if self._selected_btn:
-            self._selected_btn.setChecked(False)
+        if self._selected_btn is not None:
+            try:
+                self._selected_btn.setChecked(False)
+            except RuntimeError:
+                pass
         self._selected_btn = btn
-        if btn:
-            btn.setChecked(True)
+        if btn is not None:
+            try:
+                btn.setChecked(True)
+            except RuntimeError:
+                pass
 
     def _load_initial_data(self):
         self._top_bar.set_loading(True, _('topbar.loading_initial'))
@@ -763,7 +742,7 @@ class MainWindow(QWidget):
         try:
             cur = conn.cursor()
 
-            # Terme actif (via academicyear, pas les dates)
+            # Terme actif (via academicyear)
             cur.execute("""
                 SELECT t.id, t.label FROM larcauth_term t, larcauth_academicyear ay
                 WHERE ay.s_id = 1 AND t.trim = ay.current_term_number
@@ -819,6 +798,7 @@ class MainWindow(QWidget):
 
     def _on_theme_selected(self, key: str):
         theme_manager.set_active(key)
+        session.theme_pref = key
         self.setStyleSheet(self._STYLE)
         self._top_bar.restyle()
         self._build_sidebar()
@@ -1292,6 +1272,7 @@ class MainWindow(QWidget):
                     w.deleteLater()
 
             # Grille multi-colonnes avec scroll vertical
+            self._card_theme = session.card_theme
             cfg = CARD_THEMES.get(self._card_theme)
             card_w = cfg.card_w + cfg.margin * 2
             avail_w = self._cards_scroll.viewport().width()
@@ -1364,6 +1345,7 @@ class MainWindow(QWidget):
 
     def _on_card_theme(self, key: str):
         self._card_theme = key
+        session.card_theme = key
         if self._current_class_id:
             self._load_students(self._current_class_id)
 

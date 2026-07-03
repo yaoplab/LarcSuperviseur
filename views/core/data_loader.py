@@ -77,7 +77,9 @@ class DataLoader:
                 ORDER BY up.unit_nr, up.fk_language
             """)
             rows = cur.fetchall()
-            # Une entrée par unit_nr, en préférant le français (fk_language=2)
+            # Une entrée par unit_nr, en préférant la langue de l'utilisateur
+            from LarcSuperviseur.common.session import session
+            pref_lang = session.fk_language if session.is_authenticated else 2
             best: dict[int, dict] = {}
             for r in rows:
                 nr = r[1]
@@ -86,7 +88,7 @@ class DataLoader:
                      'start_date': r[3].isoformat(),
                      'end_date': r[4].isoformat(),
                      'fk_language': lang}
-                if nr not in best or lang == 2:
+                if nr not in best or lang == pref_lang:
                     best[nr] = d
             return [best[k] for k in sorted(best)]
         except Exception as e:
