@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from LarcSuperviseur.common.database import db
 from LarcSuperviseur.common.network import detect_network
+from LarcSuperviseur.common.session import session
 from LarcSuperviseur.common.theme import theme_manager
 from LarcSuperviseur.views.core.data_loader import DataLoader
 
@@ -66,18 +67,38 @@ class EventGenerator(QDialog):
         self._locations = self._loader.get_locations()
 
     def _load_types_from_db(self):
+        conn = db.server_conn
+        if not conn:
+            self._absence_types = [_("event.absence_fallback")]
+            self._retard_durations = self._RETARD_DURATIONS
+            return
+        lang = getattr(session, "fk_language", 2)
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT type_event, Ststus_Niveau2 FROM larcauth_type_status "
+                "WHERE fk_language = %s AND Enabled = TRUE ORDER BY idtypeevent",
+                (lang,),
+            )
+            self._absence_types = []
+            self._retard_durations = []
+            for type_evt, niveau2 in cur.fetchall():
+                if not niveau2:
+                    continue
+                if "Absence" in type_evt or "absence" in type_evt.lower():
+                    self._absence_types.append(niveau2.strip())
+                elif "Retard" in type_evt or "Tardiness" in type_evt:
+                    self._retard_durations.append(niveau2.strip())
+            if not self._absence_types:
+                self._absence_types = [_("event.absence_fallback")]
+            if not self._retard_durations:
+                self._retard_durations = self._RETARD_DURATIONS
+        except Exception:
+            self._absence_types = [_("event.absence_fallback")]
+            self._retard_durations = self._RETARD_DURATIONS
+
+        # Keep existing type hierarchy for "Autres" mode
         self._type_hierarchy = self._loader.get_event_types_tree()
-        raw = self._type_hierarchy.get("Suivi", {}).get("Absence", [])
-        self._absence_types = (
-            raw if isinstance(raw, list) else list(raw.keys()) if isinstance(raw, dict) else []
-        )
-        if not self._absence_types:
-            self._absence_types = [
-                _("event.absence_fallback"),
-                _("event.absence_fallback2"),
-                _("event.absence_fallback3"),
-                _("event.absence_fallback4"),
-            ]
 
     # ── UI ──
 
