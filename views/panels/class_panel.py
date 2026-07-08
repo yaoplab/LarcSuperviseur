@@ -1,10 +1,11 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QGridLayout
-from PySide6.QtCore import Qt, Signal, QDate
-
-from LarcSuperviseur.views.core.data_loader import DataLoader
 from larccommon.l10n import _
+from phibuilder.widgets import M3Label, M3ScrollArea
+from PySide6.QtCore import QDate, Qt, Signal
+from PySide6.QtWidgets import QGridLayout, QVBoxLayout, QWidget
+
+from LarcSuperviseur.views.core.cardsList import DEFAULT_CONFIG, StudentCard
 from LarcSuperviseur.views.core.cardsList.grid import fill_cards_grid
-from LarcSuperviseur.views.core.cardsList import StudentCard, DEFAULT_CONFIG
+from LarcSuperviseur.views.core.data_loader import DataLoader
 
 
 class ClassPanel(QWidget):
@@ -23,12 +24,12 @@ class ClassPanel(QWidget):
         self._main_layout = QVBoxLayout(self)
         self._main_layout.setContentsMargins(0, 0, 0, 0)
 
-        self._loading = QLabel("⟳ Chargement...")
+        self._loading = M3Label(_("class_panel.loading"))
         self._loading.setAlignment(Qt.AlignCenter)
         self._loading.setVisible(False)
         self._main_layout.addWidget(self._loading)
 
-        self._scroll = QScrollArea()
+        self._scroll = M3ScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
@@ -44,18 +45,17 @@ class ClassPanel(QWidget):
         self._loading.setVisible(True)
 
         if not date_from or not date_to:
-            today = QDate.currentDate().toString('yyyy-MM-dd')
+            today = QDate.currentDate().toString("yyyy-MM-dd")
             date_from = date_from or today
             date_to = date_to or today
 
         students = self._loader.get_students(class_id)
         self._students = students
 
-        student_ids = [s['id'] for s in students]
+        student_ids = [s["id"] for s in students]
         event_stats = self._loader.get_student_event_stats(student_ids, date_from, date_to)
 
-        fill_cards_grid(self._grid_layout, self._scroll,
-                        students, event_stats, self._on_card_click)
+        fill_cards_grid(self._grid_layout, self._scroll, students, event_stats, self._on_card_click)
 
         self._loading.setVisible(False)
 
@@ -84,7 +84,9 @@ class ClassPanel(QWidget):
             for _ in range(cols - remaining):
                 sp = QWidget()
                 sp.setFixedSize(cfg.card_w, cfg.card_h)
-                self._grid_layout.addWidget(sp, len(cards) // cols, cols - remaining + _, Qt.AlignCenter)
+                self._grid_layout.addWidget(
+                    sp, len(cards) // cols, cols - remaining + _, Qt.AlignCenter
+                )
 
     def show_student_highlight(self, student_id: int):
         pass

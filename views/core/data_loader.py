@@ -70,24 +70,29 @@ class DataLoader:
             cur = self._cursor()
             cur.execute("""
                 SELECT up.id, up.unit_nr, up.label, up.start_date, up.end_date,
-                       up.fk_language
+                       up.fk_language_id AS fk_language
                 FROM larcauth_unit_period up
                 JOIN larcauth_academicyear ay ON ay.s_id = 1
                 WHERE up.start_date BETWEEN ay.start_date AND ay.end_date
-                ORDER BY up.unit_nr, up.fk_language
+                ORDER BY up.unit_nr, up.fk_language_id
             """)
             rows = cur.fetchall()
             # Une entrée par unit_nr, en préférant la langue de l'utilisateur
             from LarcSuperviseur.common.session import session
+
             pref_lang = session.fk_language if session.is_authenticated else 2
             best: dict[int, dict] = {}
             for r in rows:
                 nr = r[1]
                 lang = r[5]
-                d = {'id': r[0], 'unit_nr': nr, 'label': r[2],
-                     'start_date': r[3].isoformat(),
-                     'end_date': r[4].isoformat(),
-                     'fk_language': lang}
+                d = {
+                    "id": r[0],
+                    "unit_nr": nr,
+                    "label": r[2],
+                    "start_date": r[3].isoformat(),
+                    "end_date": r[4].isoformat(),
+                    "fk_language": lang,
+                }
                 if nr not in best or lang == pref_lang:
                     best[nr] = d
             return [best[k] for k in sorted(best)]
@@ -102,7 +107,7 @@ class DataLoader:
         try:
             cur = self._cursor()
             cur.execute("SELECT id, sigle, label FROM larcauth_program ORDER BY sigle")
-            return {r[0]: {'sigle': r[1], 'label': r[2]} for r in cur.fetchall()}
+            return {r[0]: {"sigle": r[1], "label": r[2]} for r in cur.fetchall()}
         except Exception as e:
             log(f"DataLoader.get_programs: {e}")
             return {}
@@ -141,15 +146,18 @@ class DataLoader:
     def get_student_classroom(self, student_id: int) -> dict:
         try:
             cur = self._cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT s.s_classroom_id, c.label
                 FROM larcauth_student s
                 JOIN larcauth_classroom c ON c.id = s.s_classroom_id
                 WHERE s.aecuser_ptr_id = %s
-            """, (student_id,))
+            """,
+                (student_id,),
+            )
             r = cur.fetchone()
             if r:
-                return {'classroom_id': r[0], 'label': r[1]}
+                return {"classroom_id": r[0], "label": r[1]}
             return {}
         except Exception as e:
             log(f"DataLoader.get_student_classroom: {e}")
@@ -159,20 +167,21 @@ class DataLoader:
     # Statistiques de groupe (mode agrégé)
     # ------------------------------------------------------------------
     def _build_class_filter(self, mode: str) -> str:
-        if mode == 'grp_all':
+        if mode == "grp_all":
             return "AND p.sigle IN ('PEI', 'MYP', 'DPEn', 'DPFr')"
-        if mode == 'grp_college':
+        if mode == "grp_college":
             return "AND (p.sigle ILIKE 'PEI' OR p.sigle ILIKE 'MYP')"
-        if mode == 'grp_lycee':
+        if mode == "grp_lycee":
             return "AND (p.sigle ILIKE 'DPEn' OR p.sigle ILIKE 'DPFr')"
-        sigle = mode.split('_')[1]
+        sigle = mode.split("_")[1]
         return f"AND p.sigle ILIKE '{sigle}'"
 
     def get_class_stats(self, mode: str, date_from: str, date_to: str) -> list[dict]:
         try:
             cur = self._cursor()
             cf = self._build_class_filter(mode)
-            cur.execute(f"""
+            cur.execute(
+                f"""
                 SELECT c.id, c.label,
                        COUNT(DISTINCT se.event_id) AS event_count,
                        COUNT(DISTINCT CASE WHEN se.event_type = %s OR se.event_type ILIKE %s THEN se.event_id END) AS abs_count,
@@ -187,10 +196,18 @@ class DataLoader:
                 WHERE c.enabled = TRUE {cf}
                 GROUP BY c.id, c.label
                 ORDER BY c.label
-            """, ('absence', 'Suivi > Absence%', 'exit', 'Sortie%', '%Fuite%', date_from, date_to))
+            """,
+                ("absence", "Suivi > Absence%", "exit", "Sortie%", "%Fuite%", date_from, date_to),
+            )
             return [
-                {'id': r[0], 'label': r[1], 'event_count': r[2],
-                 'abs_count': r[3], 'exit_count': r[4], 'student_count': r[5]}
+                {
+                    "id": r[0],
+                    "label": r[1],
+                    "event_count": r[2],
+                    "abs_count": r[3],
+                    "exit_count": r[4],
+                    "student_count": r[5],
+                }
                 for r in cur.fetchall()
             ]
         except Exception as e:
@@ -201,7 +218,8 @@ class DataLoader:
         try:
             cur = self._cursor()
             cf = self._build_class_filter(mode)
-            cur.execute(f"""
+            cur.execute(
+                f"""
                 SELECT DATE(se.event_at) AS d, COUNT(*) AS cnt
                 FROM student_event se
                 JOIN larcauth_student s ON s.aecuser_ptr_id = se.student_id
@@ -212,8 +230,10 @@ class DataLoader:
                   AND c.enabled = TRUE {cf}
                   AND DATE(se.event_at) BETWEEN %s AND %s
                 GROUP BY d ORDER BY d
-            """, ('absence', 'Suivi > Absence%', date_from, date_to))
-            return [{'date': r[0], 'count': r[1]} for r in cur.fetchall()]
+            """,
+                ("absence", "Suivi > Absence%", date_from, date_to),
+            )
+            return [{"date": r[0], "count": r[1]} for r in cur.fetchall()]
         except Exception as e:
             log(f"DataLoader.get_attendance_trend: {e}")
             return []
@@ -222,7 +242,8 @@ class DataLoader:
         try:
             cur = self._cursor()
             cf = self._build_class_filter(mode)
-            cur.execute(f"""
+            cur.execute(
+                f"""
                 SELECT COUNT(DISTINCT s.aecuser_ptr_id) FILTER (
                     WHERE NOT EXISTS (
                         SELECT 1 FROM student_event se2
@@ -244,13 +265,23 @@ class DataLoader:
                 JOIN larcauth_level l ON l.id = c.fk_level_id
                 JOIN larcauth_program p ON p.id = l.fk_program_id
                 WHERE s.enabled = TRUE AND c.enabled = TRUE {cf}
-            """, ('absence', 'Suivi > Absence%', date_from, date_to,
-                   'absence', 'Suivi > Absence%', date_from, date_to))
+            """,
+                (
+                    "absence",
+                    "Suivi > Absence%",
+                    date_from,
+                    date_to,
+                    "absence",
+                    "Suivi > Absence%",
+                    date_from,
+                    date_to,
+                ),
+            )
             r = cur.fetchone()
-            return {'present': r[0] if r else 0, 'absent': r[1] if r else 0}
+            return {"present": r[0] if r else 0, "absent": r[1] if r else 0}
         except Exception as e:
             log(f"DataLoader.get_presence_rate: {e}")
-            return {'present': 0, 'absent': 0}
+            return {"present": 0, "absent": 0}
 
     # ------------------------------------------------------------------
     # Historique global des événements
@@ -264,8 +295,9 @@ class DataLoader:
             log(f"DataLoader.get_all_event_types: {e}")
             return []
 
-    def get_event_history(self, mode: str, date_from: str, date_to: str,
-                          class_id=None, type_filter=None) -> list[dict]:
+    def get_event_history(
+        self, mode: str, date_from: str, date_to: str, class_id=None, type_filter=None
+    ) -> list[dict]:
         try:
             cur = self._cursor()
             cf = self._build_class_filter(mode)
@@ -275,9 +307,10 @@ class DataLoader:
                 params.append(class_id)
             if type_filter:
                 cf += " AND se.event_type ILIKE %s"
-                params.append(f'%{type_filter}%')
+                params.append(f"%{type_filter}%")
 
-            cur.execute(f"""
+            cur.execute(
+                f"""
                 SELECT se.event_id,
                        aec.last_name || ' ' || aec.first_name AS student_name,
                        c.label AS class_name,
@@ -294,14 +327,22 @@ class DataLoader:
                 WHERE DATE(se.event_at) BETWEEN %s AND %s {cf}
                 ORDER BY se.event_at DESC
                 LIMIT 500
-            """, (date_from, date_to, *params))
+            """,
+                (date_from, date_to, *params),
+            )
 
             return [
                 {
-                    'event_id': r[0], 'student_name': r[1], 'class_name': r[2],
-                    'event_type': r[3], 'event_at': r[4], 'lieu_label': r[5],
-                    'subject_label': r[6], 'note': r[7], 'created_by': r[8],
-                    'validated_by': r[9],
+                    "event_id": r[0],
+                    "student_name": r[1],
+                    "class_name": r[2],
+                    "event_type": r[3],
+                    "event_at": r[4],
+                    "lieu_label": r[5],
+                    "subject_label": r[6],
+                    "note": r[7],
+                    "created_by": r[8],
+                    "validated_by": r[9],
                 }
                 for r in cur.fetchall()
             ]
@@ -315,30 +356,32 @@ class DataLoader:
     def get_students(self, class_id: int) -> list[dict]:
         try:
             cur = self._cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT s.aecuser_ptr_id,
                        aec.last_name, aec.first_name
                 FROM larcauth_student s
                 JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id
                 WHERE s.s_classroom_id = %s AND s.enabled = TRUE
                 ORDER BY aec.last_name
-            """, (class_id,))
-            return [
-                {'id': r[0], 'last_name': r[1], 'first_name': r[2]}
-                for r in cur.fetchall()
-            ]
+            """,
+                (class_id,),
+            )
+            return [{"id": r[0], "last_name": r[1], "first_name": r[2]} for r in cur.fetchall()]
         except Exception as e:
             log(f"DataLoader.get_students: {e}")
             return []
 
-    def get_student_event_stats(self, student_ids: list[int],
-                                 date_from: str, date_to: str) -> dict[int, dict]:
+    def get_student_event_stats(
+        self, student_ids: list[int], date_from: str, date_to: str
+    ) -> dict[int, dict]:
         if not student_ids:
             return {}
         try:
             cur = self._cursor()
-            ids_sql = ','.join(str(sid) for sid in student_ids)
-            cur.execute(f"""
+            ids_sql = ",".join(str(sid) for sid in student_ids)
+            cur.execute(
+                f"""
                 SELECT se.student_id,
                        COUNT(*) FILTER (WHERE se.event_type = %s OR se.event_type ILIKE %s OR se.event_type ILIKE %s) AS exit_count,
                        CASE WHEN COUNT(*) FILTER (WHERE (se.event_type = %s
@@ -348,8 +391,10 @@ class DataLoader:
                 WHERE se.student_id IN ({ids_sql})
                   AND DATE(se.event_at) BETWEEN %s AND %s
                 GROUP BY se.student_id
-            """, ('exit', 'Sortie%', '%Fuite%', 'absence', 'Suivi > Absence%', date_from, date_to))
-            return {r[0]: {'exit_count': r[1], 'presence': r[2]} for r in cur.fetchall()}
+            """,
+                ("exit", "Sortie%", "%Fuite%", "absence", "Suivi > Absence%", date_from, date_to),
+            )
+            return {r[0]: {"exit_count": r[1], "presence": r[2]} for r in cur.fetchall()}
         except Exception as e:
             log(f"DataLoader.get_student_event_stats: {e}")
             return {}
@@ -357,7 +402,8 @@ class DataLoader:
     def get_student_info(self, student_id: int) -> dict:
         try:
             cur = self._cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT aec.last_name, aec.first_name,
                        aec.email, aec.emailperso,
                        aec.tel_maison, aec.tel_smartphone_1,
@@ -366,15 +412,21 @@ class DataLoader:
                 JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id
                 JOIN larcauth_classroom c ON c.id = s.s_classroom_id
                 WHERE s.aecuser_ptr_id = %s
-            """, (student_id,))
+            """,
+                (student_id,),
+            )
             r = cur.fetchone()
             if not r:
                 return {}
             return {
-                'last_name': r[0], 'first_name': r[1],
-                'email': r[2], 'email_perso': r[3],
-                'tel_maison': r[4], 'tel_portable': r[5],
-                'date_entree': r[6], 'class_label': r[7],
+                "last_name": r[0],
+                "first_name": r[1],
+                "email": r[2],
+                "email_perso": r[3],
+                "tel_maison": r[4],
+                "tel_portable": r[5],
+                "date_entree": r[6],
+                "class_label": r[7],
             }
         except Exception as e:
             log(f"DataLoader.get_student_info: {e}")
@@ -383,33 +435,48 @@ class DataLoader:
     def get_student_kpis(self, student_id: int, date_from: str, date_to: str) -> dict:
         try:
             cur = self._cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
                     COUNT(*) FILTER (WHERE event_type = %s OR event_type ILIKE %s) AS abs_count,
                     COUNT(*) FILTER (WHERE event_type = %s OR event_type ILIKE %s OR event_type ILIKE %s) AS exit_count,
                     COUNT(*) AS total
                 FROM student_event
                 WHERE student_id = %s AND DATE(event_at) BETWEEN %s AND %s
-            """, ('absence', 'Suivi > Absence%', 'exit', 'Sortie%', '%Fuite%',
-                   student_id, date_from, date_to))
+            """,
+                (
+                    "absence",
+                    "Suivi > Absence%",
+                    "exit",
+                    "Sortie%",
+                    "%Fuite%",
+                    student_id,
+                    date_from,
+                    date_to,
+                ),
+            )
             r = cur.fetchone()
-            return {'abs_count': r[0], 'exit_count': r[1], 'total': r[2]} if r else {}
+            return {"abs_count": r[0], "exit_count": r[1], "total": r[2]} if r else {}
         except Exception as e:
             log(f"DataLoader.get_student_kpis: {e}")
             return {}
 
-    def get_student_absence_trend(self, student_id: int,
-                                   term_start: str, term_end: str) -> list[dict]:
+    def get_student_absence_trend(
+        self, student_id: int, term_start: str, term_end: str
+    ) -> list[dict]:
         try:
             cur = self._cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT DATE(event_at) AS d, COUNT(*) AS cnt
                 FROM student_event
                 WHERE student_id = %s AND (event_type = %s OR event_type ILIKE %s)
                   AND DATE(event_at) BETWEEN %s AND %s
                 GROUP BY d ORDER BY d
-            """, (student_id, 'absence', 'Suivi > Absence%', term_start, term_end))
-            return [{'date': r[0], 'count': r[1]} for r in cur.fetchall()]
+            """,
+                (student_id, "absence", "Suivi > Absence%", term_start, term_end),
+            )
+            return [{"date": r[0], "count": r[1]} for r in cur.fetchall()]
         except Exception as e:
             log(f"DataLoader.get_student_absence_trend: {e}")
             return []
@@ -417,7 +484,8 @@ class DataLoader:
     def get_student_events(self, student_id: int, limit: int = 20) -> list[dict]:
         try:
             cur = self._cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT se.event_id, se.event_type, se.event_at, se.lieu_label,
                        se.subject_label, se.note,
                        u.last_name || ' ' || u.first_name AS creator,
@@ -427,12 +495,19 @@ class DataLoader:
                 WHERE se.student_id = %s
                 ORDER BY se.event_at DESC
                 LIMIT %s
-            """, (student_id, limit))
+            """,
+                (student_id, limit),
+            )
             return [
                 {
-                    'event_id': r[0], 'event_type': r[1], 'event_at': r[2],
-                    'lieu_label': r[3], 'subject_label': r[4], 'note': r[5],
-                    'creator': r[6], 'validated_by': r[7],
+                    "event_id": r[0],
+                    "event_type": r[1],
+                    "event_at": r[2],
+                    "lieu_label": r[3],
+                    "subject_label": r[4],
+                    "note": r[5],
+                    "creator": r[6],
+                    "validated_by": r[7],
                 }
                 for r in cur.fetchall()
             ]
@@ -450,9 +525,16 @@ class DataLoader:
                 "INSERT INTO student_event (student_id, event_type, event_at, "
                 "lieu_label, subject_label, note, source, created_by) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                (data['student_id'], data['event_type'], data['event_at'],
-                 data['lieu_label'], data.get('subject_label', ''),
-                 data['note'], data['source'], data['created_by'])
+                (
+                    data["student_id"],
+                    data["event_type"],
+                    data["event_at"],
+                    data["lieu_label"],
+                    data.get("subject_label", ""),
+                    data["note"],
+                    data["source"],
+                    data["created_by"],
+                ),
             )
             self.conn.commit()
             return True
@@ -464,20 +546,27 @@ class DataLoader:
     def get_event_details(self, event_id: int) -> dict:
         try:
             cur = self._cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT se.event_type, se.event_at, se.lieu_label, se.subject_label,
                        se.note,
                        aec.last_name || ' ' || aec.first_name AS student_name
                 FROM student_event se
                 JOIN larcauth_aecuser aec ON aec.id = se.student_id
                 WHERE se.event_id = %s
-            """, (event_id,))
+            """,
+                (event_id,),
+            )
             r = cur.fetchone()
             if not r:
                 return {}
             return {
-                'event_type': r[0], 'event_at': r[1], 'lieu_label': r[2],
-                'subject_label': r[3], 'note': r[4], 'student_name': r[5],
+                "event_type": r[0],
+                "event_at": r[1],
+                "lieu_label": r[2],
+                "subject_label": r[3],
+                "note": r[4],
+                "student_name": r[5],
             }
         except Exception as e:
             log(f"DataLoader.get_event_details: {e}")
@@ -499,11 +588,14 @@ class DataLoader:
             cur.execute("SELECT validated_by FROM student_event WHERE event_id = %s", (event_id,))
             r = cur.fetchone()
             if r and r[0] is not None:
-                cur.execute("UPDATE student_event SET validated_by = NULL WHERE event_id = %s",
-                            (event_id,))
+                cur.execute(
+                    "UPDATE student_event SET validated_by = NULL WHERE event_id = %s", (event_id,)
+                )
             else:
-                cur.execute("UPDATE student_event SET validated_by = %s WHERE event_id = %s",
-                            (user_id, event_id))
+                cur.execute(
+                    "UPDATE student_event SET validated_by = %s WHERE event_id = %s",
+                    (user_id, event_id),
+                )
             self.conn.commit()
             return True
         except Exception as e:
@@ -516,7 +608,8 @@ class DataLoader:
             cur = self._cursor()
             cur.execute(
                 "UPDATE student_event SET event_type = %s, note = %s WHERE event_id = %s",
-                (event_type, note, event_id))
+                (event_type, note, event_id),
+            )
             self.conn.commit()
             return True
         except Exception as e:
@@ -560,7 +653,8 @@ class DataLoader:
         try:
             cur = self._cursor()
             try:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT cts.id, cts.label, cts.fk_teacher_id,
                            aec.last_name || ' ' || aec.first_name AS teacher_name
                     FROM larcauth_classroom_termsubject cts
@@ -569,12 +663,15 @@ class DataLoader:
                       AND cts.fk_term_id = %s
                       AND cts.enabled = TRUE
                     ORDER BY cts.label
-                """, (classroom_id, term_id))
+                """,
+                    (classroom_id, term_id),
+                )
                 rows = cur.fetchall()
                 if not rows:
                     raise Exception("empty")
             except Exception:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT cts.id, cts.label, cts.fk_teacher_id,
                            aec.last_name || ' ' || aec.first_name AS teacher_name
                     FROM larcauth_classroom_termsubject cts
@@ -582,7 +679,9 @@ class DataLoader:
                     WHERE cts.fk_classroom_id = %s
                       AND cts.enabled = TRUE
                     ORDER BY cts.label
-                """, (classroom_id,))
+                """,
+                    (classroom_id,),
+                )
                 rows = cur.fetchall()
             return rows
         except Exception as e:
@@ -595,14 +694,16 @@ class DataLoader:
     def get_event_types_tree(self) -> dict[str, dict]:
         try:
             cur = self._cursor()
-            cur.execute('''
+            cur.execute("""
                 SELECT idtypeevent, type_event,
                        COALESCE("Event_Niveau2", '') AS niv2,
                        COALESCE("Event_Niveau3", '') AS niv3
                 FROM larcauth_type_event
-                WHERE "Enabled" IS NOT FALSE
+                WHERE "Enabled" = TRUE
+                  AND type_event IS NOT NULL
+                  AND type_event != ''
                 ORDER BY idtypeevent
-            ''')
+            """)
             tree = {}
             for _, cat, niv2, niv3 in cur.fetchall():
                 if cat not in tree:
@@ -620,11 +721,13 @@ class DataLoader:
     # ------------------------------------------------------------------
     # Emploi du temps / TimeSlotGrid
     # ------------------------------------------------------------------
-    def get_classroom_timeperiods(self, classroom_id: int, weekday: int,
-                                   term_id: int) -> list[dict]:
+    def get_classroom_timeperiods(
+        self, classroom_id: int, weekday: int, term_id: int
+    ) -> list[dict]:
         try:
             cur = self._cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT tp.id, tp.debut, tp.fin, cht.id AS timetable_id
                 FROM larcauth_classroom_has_timeperiod cht
                 JOIN larcauth_timeperiod tp ON tp.id = cht.fk_timeperiod
@@ -632,10 +735,11 @@ class DataLoader:
                   AND cht.fk_weekday = %s
                   AND cht.fk_term = %s
                 ORDER BY tp.debut
-            """, (classroom_id, weekday, term_id))
+            """,
+                (classroom_id, weekday, term_id),
+            )
             return [
-                {'id': r[0], 'debut': str(r[1])[:5], 'fin': str(r[2])[:5],
-                 'timetable_id': r[3]}
+                {"id": r[0], "debut": str(r[1])[:5], "fin": str(r[2])[:5], "timetable_id": r[3]}
                 for r in cur.fetchall()
             ]
         except Exception as e:
@@ -660,18 +764,21 @@ class DataLoader:
             return []
 
     def get_classroom_timetable(self, class_id: int, term_id: int) -> dict:
-        result = {'cht_map': {}, 'cht_id_map': {}}
+        result = {"cht_map": {}, "cht_id_map": {}}
         try:
             cur = self._cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT cht.id, cht.fk_timeperiod, cht.fk_weekday,
                        coalesce(cht.s_classroom_termsubject, cht.ref_classroom_termsubject, '')
                 FROM classroom_has_timeperiod cht
                 WHERE cht.fk_classroom = %s AND cht.fk_term = %s
-            """, (class_id, term_id))
+            """,
+                (class_id, term_id),
+            )
             for cht_id, tp_id, wd, subj in cur.fetchall():
-                result['cht_map'][(wd, tp_id)] = subj
-                result['cht_id_map'][(wd, tp_id)] = cht_id
+                result["cht_map"][(wd, tp_id)] = subj
+                result["cht_id_map"][(wd, tp_id)] = cht_id
             return result
         except Exception as e:
             log(f"DataLoader.get_classroom_timetable: {e}")
@@ -680,17 +787,20 @@ class DataLoader:
     def get_available_subjects(self, class_id: int) -> list[str]:
         try:
             cur = self._cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT DISTINCT sub.label
                 FROM classroom_has_timeperiod cht
                 JOIN larcauth_subject sub ON sub.id = cht.ref_classroom_termsubject
                 WHERE cht.fk_classroom = %s AND cht.ref_classroom_termsubject IS NOT NULL
                 ORDER BY sub.label
-            """, (class_id,))
-            return [''] + [r[0] for r in cur.fetchall()]
+            """,
+                (class_id,),
+            )
+            return [""] + [r[0] for r in cur.fetchall()]
         except Exception as e:
             log(f"DataLoader.get_available_subjects: {e}")
-            return ['']
+            return [""]
 
     def get_subject_id_by_label(self, label: str):
         try:
@@ -708,11 +818,13 @@ class DataLoader:
             if subj_id:
                 cur.execute(
                     "UPDATE classroom_has_timeperiod SET ref_classroom_termsubject = %s WHERE id = %s",
-                    (subj_id, cht_id))
+                    (subj_id, cht_id),
+                )
             else:
                 cur.execute(
                     "UPDATE classroom_has_timeperiod SET ref_classroom_termsubject = NULL WHERE id = %s",
-                    (cht_id,))
+                    (cht_id,),
+                )
             self.conn.commit()
             return True
         except Exception as e:
@@ -730,15 +842,20 @@ class DataLoader:
                 "SELECT id, first_name, last_name, email, password, "
                 "type_director, type_coordonator, type_supervisor "
                 "FROM public.larcauth_aecuser WHERE email = %s",
-                (email,)
+                (email,),
             )
             r = cur.fetchone()
             if not r:
                 return None
             return {
-                'user_id': r[0], 'first_name': r[1], 'last_name': r[2],
-                'email': r[3], 'password_hash': r[4],
-                'is_director': r[5], 'is_coord': r[6], 'is_supervisor': r[7],
+                "user_id": r[0],
+                "first_name": r[1],
+                "last_name": r[2],
+                "email": r[3],
+                "password_hash": r[4],
+                "is_director": r[5],
+                "is_coord": r[6],
+                "is_supervisor": r[7],
             }
         except Exception as e:
             log(f"DataLoader.find_user_by_email: {e}")
@@ -750,7 +867,7 @@ class DataLoader:
             cur.execute(
                 "SELECT aec.last_name || ' ' || aec.first_name FROM larcauth_student s "
                 "JOIN larcauth_aecuser aec ON aec.id = s.aecuser_ptr_id WHERE s.aecuser_ptr_id = %s",
-                (student_id,)
+                (student_id,),
             )
             r = cur.fetchone()
             return r[0] if r else ""

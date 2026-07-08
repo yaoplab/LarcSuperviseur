@@ -1,11 +1,8 @@
 from larccommon.l10n import Translator, _
+from phibuilder.widgets import M3Button, M3Dialog, M3Frame, M3Label
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QDialog,
-    QFrame,
     QHBoxLayout,
-    QLabel,
-    QPushButton,
     QVBoxLayout,
 )
 
@@ -31,11 +28,11 @@ def _btn_style(selected: bool):
     )
 
 
-class PreferencesDialog(QDialog):
+class PreferencesDialog(M3Dialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(_("prefs.title"))
-        self.setFixedSize(377, 233)
+        self.setFixedSize(420, 380)
         self._orig_lang = session.fk_language
         self._orig_theme = session.theme_pref
         self._orig_card = session.card_theme
@@ -44,7 +41,7 @@ class PreferencesDialog(QDialog):
     def _make_group(
         self, label: str, options: list[tuple[str, str]], get_current, set_current
     ) -> QButtonGroup:
-        frame = QFrame()
+        frame = M3Frame()
         frame.setStyleSheet(
             f"background: {theme_manager.palette.surface_variant}; "
             f"border-radius: 6px; padding: 6px;"
@@ -52,7 +49,7 @@ class PreferencesDialog(QDialog):
         fl = QVBoxLayout(frame)
         fl.setContentsMargins(8, 4, 8, 4)
         fl.setSpacing(4)
-        lbl = QLabel(f"<b>{label}</b>")
+        lbl = M3Label(f"<b>{label}</b>")
         lbl.setStyleSheet(
             f"font-size: {theme_manager.font_size(11)}px; "
             f"color: {theme_manager.palette.text_strong};"
@@ -64,7 +61,7 @@ class PreferencesDialog(QDialog):
         group.setExclusive(True)
         current = get_current()
         for val, display in options:
-            btn = QPushButton(display)
+            btn = M3Button(display)
             btn.setCheckable(True)
             btn.setFixedSize(89, 34)
             btn.setChecked(val == current)
@@ -114,14 +111,14 @@ class PreferencesDialog(QDialog):
         p = theme_manager.palette
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        ok_btn = QPushButton(_("common.button.ok"))
+        ok_btn = M3Button(_("common.button.ok"))
         ok_btn.setStyleSheet(
             f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
             f"border: none; border-radius: 6px; padding: 6px 20px; font-weight: bold; }}"
         )
         ok_btn.clicked.connect(self._on_ok)
         btn_row.addWidget(ok_btn)
-        cancel_btn = QPushButton(_("common.button.cancel"))
+        cancel_btn = M3Button(_("common.button.cancel"))
         cancel_btn.clicked.connect(self._on_cancel)
         btn_row.addWidget(cancel_btn)
         layout.addLayout(btn_row)

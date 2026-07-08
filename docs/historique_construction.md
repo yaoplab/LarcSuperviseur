@@ -217,4 +217,56 @@ passent en `ILIKE` pour matcher aussi les nouveaux chemins :
 
 ---
 
-_3 juin 2026 — Mise à jour : 10 juin 2026_
+## Itération 4 — Refonte EventGenerator + migration M3 (07 juillet 2026)
+
+### Changements
+
+#### 1. EventGenerator réécrit en wizard séquentiel
+- 3 modes : Absence journée / Retard / Événements
+- Breadcrumb cumulatif cliquable (`Événements > Classe > Violence > Auteur`)
+- Un seul espace réinitialisé à chaque étape (plus de cartes empilées)
+- Retard : durée (5mn à 01h00), badge tertiaire
+- Matières affichées seulement si salle de cours + classe assignée
+- 3 boutons de mode égaux (plus de stretch factor)
+
+#### 2. Icônes Material Design 3
+- `larccommon/icons.py` : 40 icônes MD3 en SVG → QIcon
+- Remplacé tous les emoji dans top_bar, menus contextuels, main_window
+- `md3_icon('name', color, size)` utilisable partout
+
+#### 3. Thème unifié Larccommon → phibuilder
+- `theme_manager.phi_theme` : thème phibuilder avec les 4 couleurs LarcCommon
+- `_LarcM3Colors` : mappe `palette` → propriétés M3 (plus de violet M3 par défaut)
+- `secondary_container` mappé vers `primary_container` (évite vert pastel)
+- `ImageScale` : tailles standard (logo 89, icon_btn 18, theme_btn 34, etc.)
+
+#### 4. 25 wrappers M3 dans phibuilder/widgets/
+- Créés : M3TabWidget, M3DateEdit, M3TimeEdit, M3Frame, M3ScrollArea,
+  M3StackedWidget, M3Menu, M3HeaderView, M3DialogButtonBox, M3TextEdit,
+  M3ProgressBar, M3GroupBox, M3Splitter, M3ProfileButton
+- 22 fichiers de vues migrés (plus d'imports PySide6.QtWidgets directs)
+
+#### 5. DB type_event restaurée
+- `sql/type_event_data.sql` : 27 lignes versionnées (IDs 100-499)
+- Injecté dans Intranet ET Supabase
+
+### Fichiers modifiés
+- `views/dialogs/event_generator.py` : réécrit (~480 lignes)
+- `views/top_bar.py` : icônes MD3 + ImageScale
+- `views/main_window.py` : icônes MD3 + ImageScale
+- `views/panels/group_panel.py`, `class_panel.py`, `sidebar.py`, `student_detail.py` : migration M3
+- `views/login.py` : Logo via ImageScale
+- `views/core/event_actions.py`, `event_dialog.py` : migration M3
+- `views/dialogs/preferences.py`, `timetable_editor.py` : migration M3
+- `LarcCommon/larccommon/theme.py` : phi_theme + ImageScale + _LarcM3Colors
+- `LarcCommon/larccommon/icons.py` : nouveau module icônes
+- `LarcCommon/phibuilder/widgets/` : 13 nouveaux wrappers + __init__.py
+- `LarcHub/views/login.py`, `hub_window.py` : migration M3
+- `LarcSecretaire/views/*.py` : migration M3 (8 fichiers)
+- `sql/type_event_data.sql` : nouveau fichier versionné
+
+### Problèmes connus
+- `student_detail.py` ligne 226 : f-string backslash Python 3.11 (pré-existant)
+- Les selects `QPushButton` dans les QSS fonctionnent encore via héritage Qt
+
+---

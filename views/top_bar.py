@@ -1,14 +1,18 @@
-from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
-    QMenu, QButtonGroup,
-)
-from PySide6.QtCore import Qt, QTimer, QCoreApplication
-from PySide6.QtGui import QPixmap, QPainter, QColor, QIcon
-
-from LarcSuperviseur.common.theme import theme_manager
-from LarcSuperviseur.common.session import session
-from LarcSuperviseur.common.network import detect_network
+from larccommon.icons import icon as md3_icon
 from larccommon.l10n import _
+from phibuilder.widgets import M3Button, M3Label, M3Menu, M3ProfileButton
+from PySide6.QtCore import QCoreApplication, QSize, Qt, QTimer
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QFrame,
+    QHBoxLayout,
+    QVBoxLayout,
+)
+
+from LarcSuperviseur.common.network import detect_network
+from LarcSuperviseur.common.session import session
+from LarcSuperviseur.common.theme import theme_manager
 
 
 class TopBar(QFrame):
@@ -23,7 +27,7 @@ class TopBar(QFrame):
 
         self._unit_periods: list[dict] = []
         self._unit_keys: list[str] = []
-        self._unit_buttons: list[QPushButton] = []
+        self._unit_buttons: list[M3Button] = []
 
         self._build_ui()
         self._start_clock()
@@ -41,41 +45,60 @@ class TopBar(QFrame):
         row1 = QHBoxLayout()
         row1.setSpacing(d.radius_lg)
 
-        self._date_label = QLabel()
-        self._date_label.setStyleSheet(f"font-size: 21px; font-weight: bold; color: {p.text_strong};")
-        self._time_label = QLabel()
+        self._date_label = M3Label()
+        self._date_label.setStyleSheet(
+            f"font-size: 21px; font-weight: bold; color: {p.text_strong};"
+        )
+        self._time_label = M3Label()
         self._time_label.setStyleSheet(f"font-size: 21px; font-weight: bold; color: {p.primary};")
-        self._term_label = QLabel()
-        self._term_label.setStyleSheet(f"font-size: 13px; color: {p.text_soft}; padding-left: 13px;")
+        self._term_label = M3Label()
+        self._term_label.setStyleSheet(
+            f"font-size: 13px; color: {p.text_soft}; padding-left: 13px;"
+        )
         self._update_datetime()
         row1.addWidget(self._date_label)
         row1.addWidget(self._time_label)
         row1.addWidget(self._term_label)
         row1.addStretch()
 
-        self._network_label = QLabel()
+        self._network_label = M3Label()
         self._update_network_label()
         row1.addWidget(self._network_label)
 
-        self._theme_btn = QPushButton("🎨")
+        self._theme_btn = M3Button()
         self._theme_btn.setObjectName("theme_btn")
-        self._theme_btn.setFixedSize(34, 34)
-        self._theme_menu = QMenu()
+        self._theme_btn.setFixedSize(theme_manager.image.theme_btn, theme_manager.image.theme_btn)
+        self._theme_btn.setToolTip(_("topbar.theme_tooltip"))
+        self._theme_btn.setIcon(self._theme_icon())
+        self._theme_btn.setIconSize(
+            QSize(theme_manager.image.icon_btn, theme_manager.image.icon_btn)
+        )
+        self._theme_menu = M3Menu()
+        _theme_icon_names = {
+            "blue": "light_mode",
+            "dark": "dark_mode",
+            "sobre": "tonality",
+            "contrast": "bolt",
+        }
         for key, label in theme_manager.names():
-            a = self._theme_menu.addAction(label)
-            a.setData(key)
+            icon_name = _theme_icon_names.get(key, "light_mode")
             pal = theme_manager.get_palette(key)
-            if pal:
-                pm = QPixmap(16, 16)
-                pm.fill(QColor(pal.primary))
-                a.setIcon(QIcon(pm))
+            ic = md3_icon(
+                icon_name,
+                color=pal.primary if pal else "#1565C0",
+                size=theme_manager.image.icon_btn,
+            )
+            a = self._theme_menu.addAction(ic, label)
+            a.setData(key)
         self._theme_menu.triggered.connect(self._on_theme_triggered)
         self._theme_btn.setMenu(self._theme_menu)
         row1.addWidget(self._theme_btn)
 
         # Bouton profil (initiales)
-        self._profile_btn = QPushButton("?")
-        self._profile_btn.setFixedSize(34, 34)
+        self._profile_btn = M3ProfileButton("?")
+        self._profile_btn.setFixedSize(
+            theme_manager.image.profile_btn, theme_manager.image.profile_btn
+        )
         self._profile_btn.setCursor(Qt.PointingHandCursor)
         self._profile_btn.setStyleSheet(
             f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
@@ -83,17 +106,25 @@ class TopBar(QFrame):
             f"QPushButton:hover {{ background: {p.active}; }}"
         )
         self.update_profile()
-        self._profile_menu = QMenu(self)
-        prefs_action = self._profile_menu.addAction("Pr\u00e9f\u00e9rences")
+        self._profile_menu = M3Menu(self)
+        prefs_action = self._profile_menu.addAction(
+            md3_icon("settings", color=p.text_strong, size=theme_manager.image.icon_menu),
+            _("topbar.preferences"),
+        )
         prefs_action.triggered.connect(self._on_preferences)
         self._profile_menu.addSeparator()
-        logout_action = self._profile_menu.addAction("D\u00e9connexion")
+        logout_action = self._profile_menu.addAction(
+            md3_icon("logout", color=p.text_strong, size=theme_manager.image.icon_menu),
+            _("topbar.logout"),
+        )
         logout_action.triggered.connect(self._on_logout)
         self._profile_btn.setMenu(self._profile_menu)
         row1.addWidget(self._profile_btn)
 
-        self._loading_label = QLabel()
-        self._loading_label.setStyleSheet(f"font-size: 13px; color: {p.primary}; font-weight: bold;")
+        self._loading_label = M3Label()
+        self._loading_label.setStyleSheet(
+            f"font-size: 13px; color: {p.primary}; font-weight: bold;"
+        )
         self._loading_label.setVisible(False)
         row1.addWidget(self._loading_label)
 
@@ -104,8 +135,13 @@ class TopBar(QFrame):
         self._period_group.setExclusive(True)
         self._period_keys: list[str] = []
 
-        fixed = [(_('topbar.period.day'), 'day'), (_('topbar.period.week'), 'week'), (_('topbar.period.month'), 'month'),
-                 (_('topbar.period.term'), 'term'), ("Année", 'year')]
+        fixed = [
+            (_("topbar.period.day"), "day"),
+            (_("topbar.period.week"), "week"),
+            (_("topbar.period.month"), "month"),
+            (_("topbar.period.term"), "term"),
+            (_("topbar.year"), "year"),
+        ]
         for label, key in fixed:
             btn = self._make_period_btn(label)
             btn.clicked.connect(lambda checked, k=key: self._on_period_click(k))
@@ -121,8 +157,16 @@ class TopBar(QFrame):
         self._period_row.addLayout(self._unit_slot)
 
         self._period_row.addSpacing(13)
-        self._refresh_btn = QPushButton("⟳")
-        self._refresh_btn.setFixedSize(34, 34)
+        self._refresh_btn = M3Button()
+        self._refresh_btn.setFixedSize(
+            theme_manager.image.refresh_btn, theme_manager.image.refresh_btn
+        )
+        self._refresh_btn.setIcon(
+            md3_icon("refresh", color=p.text_strong, size=theme_manager.image.icon_btn)
+        )
+        self._refresh_btn.setIconSize(
+            QSize(theme_manager.image.icon_btn, theme_manager.image.icon_btn)
+        )
         self._refresh_btn.clicked.connect(self._on_refresh)
         self._period_row.addWidget(self._refresh_btn)
         self._period_row.addStretch()
@@ -139,8 +183,8 @@ class TopBar(QFrame):
 
     # ── Boutons période ────────────────────────────────────────────────
 
-    def _make_period_btn(self, label: str) -> QPushButton:
-        btn = QPushButton(label)
+    def _make_period_btn(self, label: str) -> M3Button:
+        btn = M3Button(label)
         btn.setObjectName("period_btn")
         btn.setCheckable(True)
         btn.setFixedSize(89, 34)
@@ -158,7 +202,7 @@ class TopBar(QFrame):
         # Re-remplir
         for up in self._unit_periods:
             key = f"unit_{up['id']}"
-            btn = self._make_period_btn(up['label'])
+            btn = self._make_period_btn(up["label"])
             btn.clicked.connect(lambda checked, k=key: self._on_period_click(k))
             self._period_group.addButton(btn)
             self._unit_buttons.append(btn)
@@ -172,11 +216,12 @@ class TopBar(QFrame):
 
     def _update_datetime(self):
         from datetime import datetime
+
         now = datetime.now()
-        self._date_label.setText(now.strftime("%A %d %B %Y") + '  ')
-        self._time_label.setText(now.strftime("%H:%M") + '  ')
+        self._date_label.setText(now.strftime("%A %d %B %Y") + "  ")
+        self._time_label.setText(now.strftime("%H:%M") + "  ")
         t = session.term_label
-        self._term_label.setText(f"— {t}" if t else '')
+        self._term_label.setText(f"— {t}" if t else "")
 
     def update_network(self):
         self._update_network_label()
@@ -186,24 +231,37 @@ class TopBar(QFrame):
         p = theme_manager.palette
         s = theme_manager.font_size
         if intranet_ok:
-            self._network_label.setText("Intranet ●")
+            self._network_label.setText(_("topbar.network.intranet"))
             self._network_label.setStyleSheet(
-                f"color: {p.success}; font-weight: bold; font-size: {s(12)}px;")
+                f"color: {p.success}; font-weight: bold; font-size: {s(12)}px;"
+            )
         elif internet_ok:
-            self._network_label.setText("Cloud ●")
+            self._network_label.setText(_("topbar.network.cloud"))
             self._network_label.setStyleSheet(
-                f"color: {p.primary}; font-weight: bold; font-size: {s(12)}px;")
+                f"color: {p.primary}; font-weight: bold; font-size: {s(12)}px;"
+            )
         else:
-            self._network_label.setText(_('topbar.network.offline'))
-            self._network_label.setStyleSheet(
-                f"color: {p.text_disabled}; font-size: {s(12)}px;")
+            self._network_label.setText(_("topbar.network.offline"))
+            self._network_label.setStyleSheet(f"color: {p.text_disabled}; font-size: {s(12)}px;")
 
-    def set_loading(self, busy: bool, msg: str = "Chargement..."):
+    def set_loading(self, busy: bool, msg: str = _("common.label.loading")):
         self._loading_label.setText("⟳ " + msg if busy else "")
         self._loading_label.setVisible(busy)
         QCoreApplication.processEvents()
 
     # ── Thème ──────────────────────────────────────────────────────────
+
+    _THEME_ICON_NAMES = {
+        "blue": "light_mode",
+        "dark": "dark_mode",
+        "sobre": "tonality",
+        "contrast": "bolt",
+    }
+
+    def _theme_icon(self) -> QIcon:
+        name = self._THEME_ICON_NAMES.get(theme_manager.active_name, "light_mode")
+        p = theme_manager.palette
+        return md3_icon(name, color=p.text_strong, size=theme_manager.image.icon_btn)
 
     def _on_theme_triggered(self, action):
         key = action.data()
@@ -214,8 +272,9 @@ class TopBar(QFrame):
         QCoreApplication.quit()
 
     def _on_preferences(self):
-        from LarcSuperviseur.views.dialogs.preferences import PreferencesDialog
         from LarcSuperviseur.common.session import session
+        from LarcSuperviseur.views.dialogs.preferences import PreferencesDialog
+
         old_theme = theme_manager.active_name
         old_card = session.card_theme
         dlg = PreferencesDialog(self)
@@ -230,7 +289,8 @@ class TopBar(QFrame):
 
     def update_profile(self):
         from LarcSuperviseur.common.session import session
-        initials = ''.join(w[0].upper() for w in session.full_name.split() if w)[:2] or '?'
+
+        initials = "".join(w[0].upper() for w in session.full_name.split() if w)[:2] or "?"
         self._profile_btn.setText(initials)
 
     # ── Réapplication du style après changement de thème ────────────────
@@ -238,17 +298,22 @@ class TopBar(QFrame):
     def restyle(self):
         p = theme_manager.palette
         s = theme_manager.font_size
+        self._theme_btn.setIcon(self._theme_icon())
         self._profile_btn.setStyleSheet(
             f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
             f"font-weight: bold; font-size: {s(13)}px; border: none; border-radius: 17px; }}"
             f"QPushButton:hover {{ background: {p.active}; }}"
         )
         self._date_label.setStyleSheet(
-            f"font-size: {s(21)}px; font-weight: bold; color: {p.text_strong};")
+            f"font-size: {s(21)}px; font-weight: bold; color: {p.text_strong};"
+        )
         self._time_label.setStyleSheet(
-            f"font-size: {s(21)}px; font-weight: bold; color: {p.primary};")
+            f"font-size: {s(21)}px; font-weight: bold; color: {p.primary};"
+        )
         self._term_label.setStyleSheet(
-            f"font-size: {s(13)}px; color: {p.text_soft}; padding-left: 13px;")
+            f"font-size: {s(13)}px; color: {p.text_soft}; padding-left: 13px;"
+        )
         self._loading_label.setStyleSheet(
-            f"font-size: {s(13)}px; color: {p.primary}; font-weight: bold;")
+            f"font-size: {s(13)}px; color: {p.primary}; font-weight: bold;"
+        )
         self._update_network_label()

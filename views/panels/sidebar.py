@@ -1,9 +1,9 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QPushButton, QGridLayout, QFrame
-from PySide6.QtCore import Signal, Qt
+from larccommon.l10n import _
+from phibuilder.widgets import M3Button, M3Frame, M3ScrollArea
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QGridLayout, QVBoxLayout, QWidget
 
 from LarcSuperviseur.common.theme import theme_manager
-from larccommon.l10n import _
-
 
 SIDEBAR_W = 233
 H_SECTION = 34
@@ -17,7 +17,7 @@ F_CLASS = 10
 F_ALL = 11
 
 
-class Sidebar(QScrollArea):
+class Sidebar(M3ScrollArea):
     class_selected = Signal(int, str)
     all_selected = Signal()
     group_selected = Signal(str)
@@ -29,7 +29,7 @@ class Sidebar(QScrollArea):
         container = QWidget()
         self.setWidget(container)
         self.setWidgetResizable(True)
-        self.setFrameShape(QFrame.NoFrame)
+        self.setFrameShape(M3Frame.NoFrame)
         self.setFixedWidth(SIDEBAR_W)
 
         container.setObjectName("panel")
@@ -39,6 +39,7 @@ class Sidebar(QScrollArea):
 
     def load_data(self):
         from LarcSuperviseur.views.core.data_loader import DataLoader
+
         self._classes = DataLoader().get_classes()
         self._build_sections()
 
@@ -54,24 +55,24 @@ class Sidebar(QScrollArea):
         d = theme_manager.design
 
         prog_style = {
-            'PEI':  (p.primary, p.primary_container, p.on_primary),
-            'MYP':  (p.secondary, p.secondary_container, p.on_secondary),
-            'DPFr': (p.error, p.error_container, p.on_error),
-            'DPEn': (p.tertiary, p.tertiary_container, p.on_tertiary),
+            "PEI": (p.primary, p.primary_container, p.on_primary),
+            "MYP": (p.secondary, p.secondary_container, p.on_secondary),
+            "DPFr": (p.error, p.error_container, p.on_error),
+            "DPEn": (p.tertiary, p.tertiary_container, p.on_tertiary),
         }
 
-        groups = {k: [] for k in ['PEI', 'MYP', 'DPEn', 'DPFr']}
+        groups = {k: [] for k in ["PEI", "MYP", "DPEn", "DPFr"]}
         for cid, label, pid, sigle in self._classes:
             if sigle in groups:
                 groups[sigle].append((cid, label))
 
         sections = [
-            ('Collège', [('PEI', 'PEI'), ('MYP', 'MYP')]),
-            ('Lycée',   [('DP', 'DPFr'), ('DPEn', 'DPEn')]),
+            ("Collège", [("PEI", "PEI"), ("MYP", "MYP")]),
+            ("Lycée", [("DP", "DPFr"), ("DPEn", "DPEn")]),
         ]
 
         for sec_name, columns in sections:
-            sec_hdr = QPushButton(sec_name)
+            sec_hdr = M3Button(sec_name)
             sec_hdr.setFixedHeight(H_SECTION)
             sec_hdr.setCursor(Qt.PointingHandCursor)
             sec_hdr.setStyleSheet(
@@ -91,7 +92,7 @@ class Sidebar(QScrollArea):
                 fg, bg, on_fg = prog_style[prog_key]
                 items = groups.get(prog_key, [])
 
-                col_hdr = QPushButton(hdr_text)
+                col_hdr = M3Button(hdr_text)
                 col_hdr.setFixedSize(COL_W, H_PROG)
                 col_hdr.setCursor(Qt.PointingHandCursor)
                 col_hdr.setStyleSheet(
@@ -104,7 +105,7 @@ class Sidebar(QScrollArea):
                 grd.addWidget(col_hdr, 0, col_idx)
 
                 for i, (cid, label) in enumerate(items):
-                    btn = QPushButton(label)
+                    btn = M3Button(label)
                     btn.setFixedSize(COL_W, H_CLASS)
                     btn.setCursor(Qt.PointingHandCursor)
                     btn.setCheckable(True)
@@ -115,13 +116,15 @@ class Sidebar(QScrollArea):
                         f"QPushButton:checked {{ background: {fg}; color: {bg}; "
                         f"border: 2px solid {fg}; }}"
                     )
-                    btn.clicked.connect(lambda checked, c=cid, l=label, b=btn: self._on_class_clicked(c, l, b))
+                    btn.clicked.connect(
+                        lambda checked, c=cid, l=label, b=btn: self._on_class_clicked(c, l, b)
+                    )
                     grd.addWidget(btn, i + 1, col_idx)
 
             layout.addLayout(grd)
             layout.addSpacing(d.spacing)
 
-        self._all_btn = QPushButton(_('sidebar.all_classes'))
+        self._all_btn = M3Button(_("sidebar.all_classes"))
         self._all_btn.setFixedHeight(H_ALL)
         self._all_btn.setCursor(Qt.PointingHandCursor)
         self._all_btn.setStyleSheet(
@@ -135,15 +138,15 @@ class Sidebar(QScrollArea):
         layout.addStretch()
 
     def _on_section_clicked(self, section: str):
-        mode_map = {'Collège': 'grp_college', 'Lycée': 'grp_lycee'}
+        mode_map = {"Collège": "grp_college", "Lycée": "grp_lycee"}
         self._clear_selection()
         self.group_selected.emit(mode_map[section])
 
     def _on_prog_clicked(self, prog: str):
         self._clear_selection()
-        self.group_selected.emit(f'grp_{prog.lower()}')
+        self.group_selected.emit(f"grp_{prog.lower()}")
 
-    def _on_class_clicked(self, class_id: int, label: str, btn: QPushButton):
+    def _on_class_clicked(self, class_id: int, label: str, btn: M3Button):
         self._clear_selection()
         btn.setChecked(True)
         self.class_selected.emit(class_id, label)
@@ -153,6 +156,6 @@ class Sidebar(QScrollArea):
         self.all_selected.emit()
 
     def _clear_selection(self):
-        for w in self.findChildren(QPushButton):
+        for w in self.findChildren(M3Button):
             if w.isCheckable():
                 w.setChecked(False)

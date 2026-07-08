@@ -1,10 +1,13 @@
 from typing import Optional
 
-from PySide6.QtWidgets import QMenu, QTableWidget
+from larccommon.icons import icon as md3_icon
+from larccommon.l10n import _
+from phibuilder.widgets import M3Menu, M3TableWidget
 
 from LarcSuperviseur.common.database import db
-from LarcSuperviseur.common.session import session
 from LarcSuperviseur.common.logger import log
+from LarcSuperviseur.common.session import session
+from LarcSuperviseur.common.theme import theme_manager
 
 
 class EventActions:
@@ -25,7 +28,8 @@ class EventActions:
             return None
         try:
             cur = conn.cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT se.event_id, se.student_id, se.event_type, se.event_at,
                        se.lieu_label, se.subject_label, se.note, se.validated_by,
                        se.agenda_day_id, se.created_by, se.created_at, se.source,
@@ -33,7 +37,9 @@ class EventActions:
                 FROM student_event se
                 JOIN larcauth_aecuser aec ON aec.id = se.student_id
                 WHERE se.event_id = %s
-            """, (event_id,))
+            """,
+                (event_id,),
+            )
             row = cur.fetchone()
             if not row:
                 return None
@@ -47,7 +53,7 @@ class EventActions:
         conn = self.conn
         if not conn:
             return False
-        allowed = {'event_type', 'note', 'lieu_label', 'subject_label', 'event_at'}
+        allowed = {"event_type", "note", "lieu_label", "subject_label", "event_at"}
         sets = []
         params = []
         for key in allowed:
@@ -59,10 +65,7 @@ class EventActions:
         params.append(event_id)
         try:
             cur = conn.cursor()
-            cur.execute(
-                f"UPDATE student_event SET {', '.join(sets)} WHERE event_id = %s",
-                params
-            )
+            cur.execute(f"UPDATE student_event SET {', '.join(sets)} WHERE event_id = %s", params)
             conn.commit()
             return True
         except Exception as e:
@@ -79,12 +82,11 @@ class EventActions:
             if validate:
                 cur.execute(
                     "UPDATE student_event SET validated_by = %s WHERE event_id = %s",
-                    (session.user_id, event_id)
+                    (session.user_id, event_id),
                 )
             else:
                 cur.execute(
-                    "UPDATE student_event SET validated_by = NULL WHERE event_id = %s",
-                    (event_id,)
+                    "UPDATE student_event SET validated_by = NULL WHERE event_id = %s", (event_id,)
                 )
             conn.commit()
             return True
@@ -107,17 +109,31 @@ class EventActions:
             conn.rollback()
             return False
 
-    def get_context_menu(self, event_id: int, parent=None) -> QMenu:
+    def get_context_menu(self, event_id: int, parent=None) -> M3Menu:
         event = self.get_event_by_id(event_id)
-        is_validated = event is not None and event.get('validated_by') is not None
-        menu = QMenu(parent)
-        menu.addAction("✏️ Modifier")
-        menu.addAction("🔒 Dévalider" if is_validated else "✅ Valider")
-        menu.addAction("🗑️ Supprimer")
+        is_validated = event is not None and event.get("validated_by") is not None
+        menu = M3Menu(parent)
+        p = theme_manager.palette
+        menu.addAction(
+            md3_icon("edit", color=p.text_strong, size=theme_manager.image.icon_menu),
+            _("context_menu.edit"),
+        )
+        menu.addAction(
+            md3_icon(
+                "lock" if is_validated else "check_circle",
+                color=p.text_strong,
+                size=theme_manager.image.icon_menu,
+            ),
+            _("context_menu.invalidate") if is_validated else _("context_menu.validate"),
+        )
+        menu.addAction(
+            md3_icon("delete", color=p.text_strong, size=theme_manager.image.icon_menu),
+            _("context_menu.delete"),
+        )
         return menu
 
     @staticmethod
-    def get_event_id_from_table(table: QTableWidget) -> Optional[int]:
+    def get_event_id_from_table(table: M3TableWidget) -> Optional[int]:
         idx = table.currentRow()
         if idx < 0:
             return None
@@ -125,6 +141,6 @@ class EventActions:
         return int(item.text()) if item and item.text().isdigit() else None
 
     @staticmethod
-    def get_event_id_from_row(table: QTableWidget, row: int) -> Optional[int]:
+    def get_event_id_from_row(table: M3TableWidget, row: int) -> Optional[int]:
         item = table.item(row, 0)
         return int(item.text()) if item and item.text().isdigit() else None

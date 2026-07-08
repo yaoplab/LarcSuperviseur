@@ -1,23 +1,27 @@
-import os
 import hashlib
-from typing import Optional
+import os
 import time
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QPushButton, QLineEdit,
-    QMessageBox, QApplication, QTabWidget, QCheckBox,
-    QProgressDialog,
-)
-from PySide6.QtCore import Qt, QThread, Signal, QTimer, QEvent
-from PySide6.QtGui import QPixmap
-from LarcSuperviseur.common.database import db
-from LarcSuperviseur.common.session import session, UserRole, ConnMode
-from LarcSuperviseur.common.logger import log
-from LarcSuperviseur.common.trace import trace
+from typing import Optional
+
 from larccommon.l10n import Translator, _
-from LarcSuperviseur.common.network import detect_network
-from LarcSuperviseur.common.theme import theme_manager
-from LarcSuperviseur.common.auth import OAuth2Manager
+from phibuilder.widgets import M3Button, M3Label, M3TabWidget, M3TextField
+from PySide6.QtCore import QEvent, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QProgressDialog,
+    QVBoxLayout,
+    QWidget,
+)
+
 from LarcSuperviseur.common.app_config import app_config
+from LarcSuperviseur.common.auth import OAuth2Manager
+from LarcSuperviseur.common.database import db
+from LarcSuperviseur.common.logger import log
+from LarcSuperviseur.common.network import detect_network
+from LarcSuperviseur.common.session import ConnMode, UserRole, session
+from LarcSuperviseur.common.theme import QssHelper, theme_manager
+from LarcSuperviseur.common.trace import trace
 
 
 class _Worker(QThread):
@@ -37,38 +41,38 @@ class _Worker(QThread):
 
 
 class LoginWindow(QWidget):
-
     _login_attempts: dict[str, dict] = {}
 
     @classmethod
     def _check_rate_limit(cls, key: str) -> bool:
         now = time.time()
         entry = cls._login_attempts.get(key)
-        if entry and entry['until'] > now:
-            remaining = int(entry['until'] - now)
-            raise RuntimeError(f"Trop de tentatives. R\u00e9essayez dans {remaining}s.")
-        if entry and entry['until'] <= now:
+        if entry and entry["until"] > now:
+            remaining = int(entry["until"] - now)
+            raise RuntimeError(_("login.too_many_attempts").format(seconds=remaining))
+        if entry and entry["until"] <= now:
             cls._login_attempts.pop(key, None)
         return True
 
     @classmethod
     def _record_failure(cls, key: str):
-        entry = cls._login_attempts.setdefault(key, {'count': 0, 'until': 0})
-        entry['count'] += 1
-        if entry['count'] >= 5:
-            entry['until'] = time.time() + 30
+        entry = cls._login_attempts.setdefault(key, {"count": 0, "until": 0})
+        entry["count"] += 1
+        if entry["count"] >= 5:
+            entry["until"] = time.time() + 30
 
     def __init__(self):
         super().__init__()
         self._worker: Optional[_Worker] = None
         self._tabs_forced = False
         import os
-        lang = os.environ.get('LARC_LANG', 'fr')
+
+        lang = os.environ.get("LARC_LANG", "fr")
         trans = Translator.instance(lang)
         trans.load_dir(Translator.l10n_dir())
         trace(f" LoginWindow.__init__: langue={lang}")
         self.setWindowTitle(_("app.title.superviseur") + " - " + _("login.title"))
-        trace(f" LoginWindow.__init__: démarre")
+        trace(" LoginWindow.__init__: démarre")
 
         ok_intra = db.connect_intranet()
         trace(f" LoginWindow.__init__: connect_intranet={ok_intra}")
@@ -98,49 +102,9 @@ class LoginWindow(QWidget):
         except Exception:
             return ""
 
-    def _style(self) -> str:
-        p = theme_manager.palette
-        rd = 8
-        return f"""
-            QWidget#root {{ background: {p.background}; }}
-            QLabel {{ font-size: 13px; color: {p.text_strong}; }}
-            QTabWidget::pane {{
-                border: 1px solid {p.outline_variant}; background: {p.surface};
-                border-radius: {rd}px;
-            }}
-            QTabBar::tab          {{ padding: 6px 16px; font-size: 13px; }}
-            QTabBar::tab:selected {{
-                background: {p.surface}; border-bottom: 2px solid {p.primary};
-                color: {p.text_strong}; font-weight: bold;
-            }}
-            QTabBar::tab:!selected {{ background: {p.surface_variant}; color: {p.text_soft}; }}
-            QLineEdit {{
-                padding: 7px 10px; border: 1px solid {p.outline_variant};
-                border-radius: {rd}px; font-size: 13px; background: {p.surface};
-                color: {p.text_strong};
-            }}
-            QLineEdit:focus {{ border-color: {p.primary}; }}
-            QPushButton {{
-                padding: 9px 20px; border: none; border-radius: {rd}px;
-                font-size: 13px; font-weight: bold; color: white;
-            }}
-            QPushButton#btnIntra  {{ background: {p.primary}; }}
-            QPushButton#btnIntra:hover  {{ background: {p.active}; }}
-            QPushButton#btnIntra:disabled  {{ background: {p.inactive}; }}
-            QPushButton#btnGoogle {{ background: #DB4437; }}
-            QPushButton#btnGoogle:hover {{ background: #C53929; }}
-            QPushButton#btnGoogle:disabled {{ background: {p.inactive}; }}
-            QPushButton#btnCloud {{ background: {p.primary}; }}
-            QPushButton#btnCloud:hover {{ background: {p.active}; }}
-            QLabel#errLabel {{ color: {p.error}; font-size: 13px; }}
-            QLabel#hdrTitle {{ color: {p.text_strong}; font-size: 21px; font-weight: bold; }}
-            QLabel#hdrSub   {{ color: {p.text_soft}; font-size: 13px; }}
-            QLabel#infoLbl  {{ color: {p.text_soft}; font-size: 13px; }}
-            QLabel#formLbl {{ color: {p.text_strong}; font-size: 13px; }}
-        """
-
     def _init_ui(self):
-        self.setStyleSheet(self._style())
+        self.setObjectName("root")
+        self.setStyleSheet(QssHelper.login_qss(theme_manager.palette))
         W = 420
         H = int(W * 1.618033988749895)
         self.setFixedSize(W, H)
@@ -149,11 +113,13 @@ class LoginWindow(QWidget):
         outer.setContentsMargins(34, 21, 34, 21)
         outer.setSpacing(0)
 
-        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'img', 'logoAEC.png')
-        self._logo_label = QLabel()
+        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "img", "logoAEC.png")
+        self._logo_label = M3Label()
         if os.path.exists(logo_path):
             pix = QPixmap(logo_path)
-            self._logo_pixmap = pix.scaledToHeight(89, Qt.SmoothTransformation)
+            self._logo_pixmap = pix.scaledToHeight(
+                theme_manager.image.logo, Qt.SmoothTransformation
+            )
             self._logo_label.setPixmap(self._logo_pixmap)
         else:
             self._logo_pixmap = None
@@ -164,45 +130,45 @@ class LoginWindow(QWidget):
         outer.addWidget(self._logo_label)
         outer.addSpacing(21)
 
-        title = QLabel("LarcSuperviseur")
+        title = M3Label(_("login.superviseur_title"))
         title.setObjectName("hdrTitle")
         title.setAlignment(Qt.AlignCenter)
         outer.addWidget(title)
         outer.addSpacing(8)
 
-        sub = QLabel("Supervision de la vie scolaire")
+        sub = M3Label(_("login.superviseur_subtitle"))
         sub.setObjectName("hdrSub")
         sub.setAlignment(Qt.AlignCenter)
         outer.addWidget(sub)
         outer.addSpacing(21)
 
-        self._net_label = QLabel()
+        self._net_label = M3Label()
         self._net_label.setAlignment(Qt.AlignCenter)
         self._net_label.setObjectName("infoLbl")
         outer.addWidget(self._net_label)
         outer.addSpacing(21)
 
-        self._force_check = QCheckBox("Choisir connexion")
+        self._force_check = QCheckBox(_("login.choose_connection"))
         self._force_check.setVisible(False)
         self._force_check.toggled.connect(self._on_force_toggle)
         outer.addWidget(self._force_check, 0, Qt.AlignCenter)
         outer.addSpacing(21)
 
-        self._tabs = QTabWidget()
+        self._tabs = M3TabWidget()
         self._tab_intra_widget = self._tab_intranet()
         self._tab_cloud_widget = self._tab_cloud()
-        self._tabs.addTab(self._tab_intra_widget, "Intranet")
-        self._tabs.addTab(self._tab_cloud_widget, "Cloud")
+        self._tabs.addTab(self._tab_intra_widget, _("login.tab_intranet"))
+        self._tabs.addTab(self._tab_cloud_widget, _("login.tab_cloud"))
         outer.addWidget(self._tabs, 1)
 
-        self._err_label = QLabel()
+        self._err_label = M3Label()
         self._err_label.setObjectName("errLabel")
         self._err_label.setAlignment(Qt.AlignCenter)
         self._err_label.setWordWrap(True)
         outer.addWidget(self._err_label)
         outer.addSpacing(8)
 
-        self._status_label = QLabel()
+        self._status_label = M3Label()
         self._status_label.setObjectName("infoLbl")
         outer.addWidget(self._status_label)
 
@@ -231,24 +197,24 @@ class LoginWindow(QWidget):
         layout = QVBoxLayout(w)
         layout.setAlignment(Qt.AlignCenter)
 
-        email_lbl = QLabel("Email :")
+        email_lbl = M3Label(_("login.email_label"))
         email_lbl.setObjectName("formLbl")
         layout.addWidget(email_lbl)
-        email = QLineEdit()
+        email = M3TextField()
         email.setPlaceholderText(_("login.email_placeholder"))
-        email.setFixedHeight(55)
+        email.setFixedHeight(theme_manager.image.field_height)
         self._edt_i_email = email
         layout.addWidget(email)
 
         layout.addSpacing(21)
 
-        pwd_lbl = QLabel("Mot de passe :")
+        pwd_lbl = M3Label(_("login.password_label"))
         pwd_lbl.setObjectName("formLbl")
         layout.addWidget(pwd_lbl)
-        pwd = QLineEdit()
-        pwd.setEchoMode(QLineEdit.Password)
+        pwd = M3TextField()
+        pwd.setEchoMode(M3TextField.Password)
         pwd.setPlaceholderText(_("login.password_placeholder"))
-        pwd.setFixedHeight(55)
+        pwd.setFixedHeight(theme_manager.image.field_height)
         pwd.returnPressed.connect(self._on_intranet)
         self._edt_i_pwd = pwd
         layout.addWidget(pwd)
@@ -256,20 +222,20 @@ class LoginWindow(QWidget):
         layout.addSpacing(34)
 
         if self._term_label:
-            term_lbl = QLabel(f"Trimestre : {self._term_label}")
+            term_lbl = M3Label(_("login.term_label").format(label=self._term_label))
             term_lbl.setObjectName("infoLbl")
             term_lbl.setAlignment(Qt.AlignCenter)
             layout.addWidget(term_lbl)
             layout.addSpacing(16)
 
-        btn = QPushButton("Connexion Intranet")
+        btn = M3Button(_("login.connect_intranet"))
         btn.setObjectName("btnIntra")
         btn.setFixedSize(210, 55)
         btn.clicked.connect(self._on_intranet)
         layout.addWidget(btn, 0, Qt.AlignCenter)
 
         layout.addSpacing(21)
-        info = QLabel("Authentification via le serveur interne.")
+        info = M3Label(_("login.info_intranet"))
         info.setObjectName("infoLbl")
         info.setAlignment(Qt.AlignCenter)
         layout.addWidget(info)
@@ -280,38 +246,38 @@ class LoginWindow(QWidget):
         layout = QVBoxLayout(w)
         layout.setAlignment(Qt.AlignCenter)
 
-        info = QLabel("Connectez-vous avec votre compte\nGoogle @arc-en-ciel.org")
+        info = M3Label(_("login.info_cloud"))
         info.setObjectName("infoLbl")
         info.setAlignment(Qt.AlignCenter)
         layout.addWidget(info)
         layout.addSpacing(24)
 
         if self._term_label:
-            term_lbl = QLabel(f"Trimestre : {self._term_label}")
+            term_lbl = M3Label(_("login.term_label").format(label=self._term_label))
             term_lbl.setObjectName("infoLbl")
             term_lbl.setAlignment(Qt.AlignCenter)
             layout.addWidget(term_lbl)
             layout.addSpacing(16)
 
-        btn = QPushButton("Connexion Google")
+        btn = M3Button(_("login.connect_google"))  # clé manquante dans fr.json
         btn.setObjectName("btnGoogle")
         btn.setFixedSize(210, 55)
         btn.clicked.connect(self._on_cloud)
         layout.addWidget(btn, 0, Qt.AlignCenter)
 
         layout.addSpacing(16)
-        info2 = QLabel("Authentification OAuth2 via Supabase.")
+        info2 = M3Label(_("login.info_oauth"))
         info2.setObjectName("infoLbl")
         info2.setAlignment(Qt.AlignCenter)
         layout.addWidget(info2)
         return w
 
     def _on_intranet(self):
-        trace(f"_on_intranet: START")
+        trace("_on_intranet: START")
         email = self._edt_i_email.text().strip()
         password = self._edt_i_pwd.text()
         if not email or not password:
-            trace(f"_on_intranet: email or password empty")
+            trace("_on_intranet: email or password empty")
             self._show_error(_("login.error.required"))
             return
         try:
@@ -337,7 +303,7 @@ class LoginWindow(QWidget):
                 "SELECT id, first_name, last_name, email, password, "
                 "type_director, type_coordonator, type_supervisor "
                 "FROM public.larcauth_aecuser WHERE email = %s",
-                (email,)
+                (email,),
             )
             row = cur.fetchone()
             if row is None:
@@ -348,7 +314,7 @@ class LoginWindow(QWidget):
 
             user_id, first_name, last_name, email, pwd_hash, is_dir, is_coord, is_sup = row
 
-            pass_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
+            pass_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
             if pwd_hash and pwd_hash != pass_hash:
                 self._set_busy(False)
                 self._show_error(_("login.error.wrong_password"))
@@ -357,25 +323,30 @@ class LoginWindow(QWidget):
 
             if not (is_dir or is_coord or is_sup):
                 self._set_busy(False)
-                self._show_error(
-                    _("login.error.restricted"))
+                self._show_error(_("login.error.restricted"))
                 db.disconnect_all()
                 return
 
-            if is_dir: role = UserRole.ADMIN
-            elif is_coord: role = UserRole.COORD
-            else: role = UserRole.SUPERVISEUR
+            if is_dir:
+                role = UserRole.ADMIN
+            elif is_coord:
+                role = UserRole.COORD
+            else:
+                role = UserRole.SUPERVISEUR
 
             import os
+
             # Lire la langue preferee de l'utilisateur
             user_lang_id = 2
             try:
                 cur.execute("SELECT fk_language FROM larcauth_aecuser WHERE id = %s", (user_id,))
                 r = cur.fetchone()
-                if r: user_lang_id = int(r[0])
-            except: pass
-            user_lang = 'en' if user_lang_id == 1 else 'fr'
-            lang = os.environ.get('LARC_LANG', user_lang)
+                if r:
+                    user_lang_id = int(r[0])
+            except:
+                pass
+            user_lang = "en" if user_lang_id == 1 else "fr"
+            lang = os.environ.get("LARC_LANG", user_lang)
             trans = Translator.instance(lang)
             trans.reload(Translator.l10n_dir())
 
@@ -401,9 +372,9 @@ class LoginWindow(QWidget):
                 pass
 
             log(f"Connexion Intranet : {session.full_name} ({role.value})")
-            trace(f" _on_intranet: session OK, appel _open_main_window")
+            trace(" _on_intranet: session OK, appel _open_main_window")
             self._open_main_window()
-            trace(f" _open_main_window terminé")
+            trace(" _open_main_window terminé")
 
         except Exception as e:
             self._set_busy(False)
@@ -413,7 +384,7 @@ class LoginWindow(QWidget):
 
     def _on_cloud(self):
         try:
-            self._check_rate_limit('cloud')
+            self._check_rate_limit("cloud")
         except RuntimeError as e:
             self._show_error(str(e))
             return
@@ -427,12 +398,12 @@ class LoginWindow(QWidget):
         self._set_busy(False)
         ok, res, err = result
         if not ok:
-            self._record_failure('cloud')
-            self._show_error(err or "Authentification \u00e9chou\u00e9e.")
+            self._record_failure("cloud")
+            self._show_error(err or _("login.error.auth_failed"))
             return
 
         if res.role not in (UserRole.SUPERVISEUR, UserRole.COORD, UserRole.ADMIN):
-            self._show_error("Acc\u00e8s non autoris\u00e9 pour ce compte.")
+            self._show_error(_("login.error.unauthorized"))
             return
 
         session.user_id = res.user_id
@@ -449,26 +420,24 @@ class LoginWindow(QWidget):
         self._open_main_window()
 
     def _open_main_window(self):
-        from LarcSuperviseur.common.photos import get_uncached_ids, PhotoPreloader
+        from LarcSuperviseur.common.photos import PhotoPreloader, get_uncached_ids
         from LarcSuperviseur.views.main_window import MainWindow
 
         student_ids = get_uncached_ids()
         if student_ids:
             progress = QProgressDialog(
-                "Pr\u00e9paration des photos...", "Annuler", 0, len(student_ids), self)
-            progress.setWindowTitle("LarcSuperviseur")
+                _("login.photo_preparation"), _("common.button.cancel"), 0, len(student_ids), self
+            )
+            progress.setWindowTitle(_("login.progress_photos"))
             progress.setWindowModality(Qt.WindowModal)
             progress.setMinimumDuration(0)
             progress.setValue(0)
 
             preloader = PhotoPreloader(student_ids, self)
-            preloader.progress.connect(
-                lambda cur, total, sid: progress.setValue(cur))
-            preloader.done.connect(
-                lambda loaded, failed: progress.close())
+            preloader.progress.connect(lambda cur, total, sid: progress.setValue(cur))
+            preloader.done.connect(lambda loaded, failed: progress.close())
             progress.canceled.connect(preloader.cancel)
-            preloader.finished.connect(
-                lambda: self._do_open_main_window(MainWindow))
+            preloader.finished.connect(lambda: self._do_open_main_window(MainWindow))
             preloader.finished.connect(preloader.deleteLater)
             preloader.start()
             self._preloader = preloader
@@ -492,12 +461,12 @@ class LoginWindow(QWidget):
             intra_color = p.success if intra_ok else p.text_soft
             cloud_color = p.primary if internet_ok else p.text_soft
             self._net_label.setText(
-                f"<span style='color:{intra_color}'>Intranet \u25cf</span>"
+                f"<span style='color:{intra_color}'>{_('login.status.intranet')}</span>"
                 f"   "
-                f"<span style='color:{cloud_color}'>Cloud \u25cf</span>"
+                f"<span style='color:{cloud_color}'>{_('login.status.cloud')}</span>"
             )
             self._net_label.setTextFormat(Qt.RichText)
-            self._net_label.setStyleSheet(f"font-weight: bold; font-size: 13px;")
+            self._net_label.setStyleSheet("font-weight: bold; font-size: 13px;")
             return
 
         if intra_ok and internet_ok:
@@ -505,7 +474,7 @@ class LoginWindow(QWidget):
             self._tabs.setTabVisible(1, False)
             self._tabs.setCurrentIndex(0)
             self._err_label.setText("")
-            self._net_label.setText("Intranet \u25cf")
+            self._net_label.setText(_("login.status.intranet"))
             self._net_label.setStyleSheet(
                 f"color: {p.success}; font-weight: bold; font-size: 13px;"
             )
@@ -515,7 +484,7 @@ class LoginWindow(QWidget):
             self._tabs.setTabVisible(1, True)
             self._tabs.setCurrentIndex(1)
             self._err_label.setText("")
-            self._net_label.setText("Cloud \u25cf")
+            self._net_label.setText(_("login.status.cloud"))
             self._net_label.setStyleSheet(
                 f"color: {p.primary}; font-weight: bold; font-size: 13px;"
             )
@@ -525,7 +494,7 @@ class LoginWindow(QWidget):
             self._tabs.setTabVisible(1, False)
             self._tabs.setCurrentIndex(0)
             self._err_label.setText("")
-            self._net_label.setText("Intranet \u25cf")
+            self._net_label.setText(_("login.status.intranet"))
             self._net_label.setStyleSheet(
                 f"color: {p.success}; font-weight: bold; font-size: 13px;"
             )
@@ -533,8 +502,8 @@ class LoginWindow(QWidget):
         else:
             self._tabs.setTabVisible(0, False)
             self._tabs.setTabVisible(1, False)
-            self._err_label.setText("Acc\u00e8s \u00e0 LarcSuperviseur Impossible")
-            self._net_label.setText("Hors ligne")
+            self._err_label.setText(_("login.status.error"))
+            self._net_label.setText(_("login.status.offline"))
             self._net_label.setStyleSheet(
                 f"color: {p.text_disabled}; font-weight: bold; font-size: 13px;"
             )
@@ -550,9 +519,9 @@ class LoginWindow(QWidget):
         self._err_label.setText("")
 
     def _set_busy(self, busy: bool):
-        for btn in self.findChildren(QPushButton):
+        for btn in self.findChildren(M3Button):
             btn.setEnabled(not busy)
         if busy:
-            self._status_label.setText("Connexion en cours...")
+            self._status_label.setText(_("login.connecting"))
         else:
             self._status_label.setText("")

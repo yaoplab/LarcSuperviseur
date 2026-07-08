@@ -1,429 +1,490 @@
+from larccommon.l10n import _
+from phibuilder.phi.scale import SpacingToken
+from phibuilder.widgets import M3Button, M3Card, M3Label, M3TextField
+from phibuilder.widgets.button import ButtonVariant
+from phibuilder.widgets.card import CardVariant
+from PySide6.QtCore import QDate, Qt, QTime
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QDateEdit, QFrame, QGridLayout, QButtonGroup, QStackedWidget,
-    QTextEdit, QDialogButtonBox, QMessageBox, QWidget, QTimeEdit,
+    QDateEdit,
+    QDialog,
+    QGridLayout,
+    QHBoxLayout,
+    QMessageBox,
+    QPushButton,
+    QTimeEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QDate, QTime
+
 from LarcSuperviseur.common.database import db
 from LarcSuperviseur.common.network import detect_network
 from LarcSuperviseur.common.theme import theme_manager
 from LarcSuperviseur.views.core.data_loader import DataLoader
-from larccommon.l10n import _
 
 
 class EventGenerator(QDialog):
+    _CAT_COLORS = {
+        "Bureau BI": ("#d32f2f", "#ffffff"),
+        "Médical": ("#1976d2", "#ffffff"),
+        "Sortie": ("#e65100", "#ffffff"),
+        "Suivi": ("#f9a825", "#222222"),
+    }
+    _RETARD_DURATIONS = ["5 mn", "10 min", "15 min", "30 min", "45 min", "01h00"]
+
     def __init__(self, student_id: int, parent=None):
         super().__init__(parent)
         self._student_id = student_id
-        self._subjects = []
         self._locations = []
         self._classroom_lieu_ids = set()
         self._selected_lieu_id = 0
         self._selected_lieu_label = ""
-        self._selected_category = None
-        self._selected_niv2 = None
-        self._selected_type_path = None
+        self._selected_subject = ""
         self._type_hierarchy = {}
         self._student_classroom_id = None
         self._student_classroom_label = ""
         self._loader = DataLoader()
+        self._path = []
+        self._mode = None
+        self._absence_types = []
+        self._phi = theme_manager.phi_theme
         self.setWindowTitle(_("event.window_title").format(id=student_id))
-        self.setMinimumWidth(600)
+        self.setMinimumWidth(680)
         self._load_student_classroom()
         self._load_types_from_db()
+        self._load_locations()
         self._init_ui()
+
+    # ── Data loading ──
 
     def _load_student_classroom(self):
         data = self._loader.get_student_classroom(self._student_id)
         if data:
-            self._student_classroom_id = data['classroom_id']
-            self._student_classroom_label = data['label']
-
-    def _get_term_id(self) -> int:
-        return self._loader.get_term_id()
-
-    def _init_ui(self):
-        layout = QVBoxLayout()
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        fs = 10
-        sp = 8
-        rd = 4
-        # --- 1. Infos élève ---
-        student_name = self._loader.get_student_name(self._student_id) or _("event.student_fallback").format(id=self._student_id)
-        top_row = QHBoxLayout()
-        name_label = QLabel(f"<b>{student_name}</b>")
-        name_label.setStyleSheet(f"font-size: {s(16)}px; padding: 8px; color: {p.text_strong};")
-        top_row.addWidget(name_label)
-        if self._student_classroom_label:
-            top_row.addStretch()
-            cls_label = QLabel(f"<b>{self._student_classroom_label}</b>")
-            cls_label.setStyleSheet(f"font-size: {s(16)}px; padding: 8px; color: {p.text_soft};")
-            top_row.addWidget(cls_label)
-        layout.addLayout(top_row)
-
-        # --- 2. Date et Heure séparées ---
-        dt_frame = QFrame()
-        dt_frame.setStyleSheet(
-            f"background: {p.surface_variant}; border-radius: {rd}px; padding: 6px;")
-        dt_layout = QHBoxLayout(dt_frame)
-        dt_layout.setSpacing(sp)
-
-        dt_layout.addWidget(QLabel(_("event.date")))
-        self._date_edit = QDateEdit(QDate.currentDate())
-        self._date_edit.setCalendarPopup(True)
-        self._date_edit.setDisplayFormat("dddd dd MMMM yyyy")
-        self._date_edit.setStyleSheet(
-            f"padding: 6px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
-            f"font-size: {s(12)}px; background: {p.surface}; color: {p.text_strong}; "
-            f"font-weight: bold;")
-        dt_layout.addWidget(self._date_edit, 1)
-
-        dt_layout.addWidget(QLabel(_("event.time")))
-        self._time_edit = QTimeEdit(QTime.currentTime())
-        self._time_edit.setDisplayFormat("HH:mm")
-        self._time_edit.setStyleSheet(
-            f"padding: 6px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
-            f"font-size: {s(12)}px; background: {p.surface}; color: {p.text_strong}; "
-            f"font-weight: bold;")
-        dt_layout.addWidget(self._time_edit)
-
-        self._source_label = QLabel()
-        self._update_source_label()
-        dt_layout.addWidget(self._source_label)
-        layout.addWidget(dt_frame)
-
-        # --- 3. Lieu ---
-        layout.addSpacing(sp)
-        lieu_header_row = QHBoxLayout()
-        lieu_header_row.addWidget(QLabel(f"<b>{_('event.location')}</b>"))
-        if self._student_classroom_label:
-            self._classe_label = QLabel(_("event.classroom_label").format(label=self._student_classroom_label))
-            self._classe_label.setStyleSheet(f"font-size: {s(12)}px; color: {p.text_soft}; padding: 4px 8px;")
-            lieu_header_row.addStretch()
-            lieu_header_row.addWidget(self._classe_label)
-        layout.addLayout(lieu_header_row)
-
-        lieu_btn_style = (
-            f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
-            f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
-            f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
-            f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
-            f"QPushButton:checked {{ background: {p.primary_container}; "
-            f"border: 2px solid {p.primary}; }}"
-        )
-
-        self._classroom_lieu_ids = set()
-        self._lieu_group = QButtonGroup(self)
-        self._lieu_group.setExclusive(True)
-        lieu_grid = QGridLayout()
-        lieu_grid.setSpacing(8)
-        self._load_locations()
-        for idx, (lid, sid, lieu_name) in enumerate(self._locations):
-            btn = QPushButton(lieu_name)
-            btn.setCheckable(True)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(64)
-            btn.setStyleSheet(lieu_btn_style)
-            if idx == 0:
-                btn.setChecked(True)
-                self._selected_lieu_id = lid
-                self._selected_lieu_label = lieu_name
-            self._lieu_group.addButton(btn, lid)
-            lieu_grid.addWidget(btn, idx // 4, idx % 4)
-            if sid == 1:
-                self._classroom_lieu_ids.add(lid)
-        self._lieu_group.buttonClicked.connect(self._on_lieu_changed)
-        layout.addLayout(lieu_grid)
-
-        # --- 4. Matière ---
-        layout.addSpacing(sp)
-        self._matiere_group_widget = QWidget()
-        matiere_vbox = QVBoxLayout(self._matiere_group_widget)
-        matiere_vbox.setContentsMargins(0, 0, 0, 0)
-        matiere_vbox.addWidget(QLabel(f"<b>{_('event.subject')}</b>"))
-
-        self._subject_group = QButtonGroup(self)
-        self._subject_group.setExclusive(True)
-        self._subject_grid = QGridLayout()
-        self._subject_grid.setSpacing(8)
-        matiere_vbox.addLayout(self._subject_grid)
-        self._load_subjects()
-        layout.addWidget(self._matiere_group_widget)
-        self._refresh_matiere_visibility()
-
-        # --- 5. Type d'événement hiérarchique ---
-        layout.addSpacing(sp)
-        layout.addWidget(QLabel(f"<b>{_('event.type')}</b>"))
-        layout.addSpacing(4)
-
-        # Barre de sélection cliquable (remplace _sel_label)
-        self._sel_btn = QPushButton("")
-        self._sel_btn.setStyleSheet(
-            f"QPushButton {{ background: {p.surface_variant}; color: {p.primary}; "
-            f"font-size: {s(12)}px; font-weight: bold; padding: 6px 12px; "
-            f"border: 1px solid {p.outline_variant}; border-radius: {rd}px; text-align: left; }}"
-            f"QPushButton:hover {{ border-color: {p.primary}; }}")
-        self._sel_btn.setMinimumHeight(24)
-        self._sel_btn.setCursor(Qt.PointingHandCursor)
-        self._sel_btn.clicked.connect(self._on_sel_clicked)
-        layout.addWidget(self._sel_btn)
-
-        self._cat_colors = {'Bureau BI': '#d32f2f', 'Médical': '#1976d2',
-                            'Sortie': '#e65100', 'Suivi': '#f9a825'}
-        self._cat_group = QButtonGroup(self)
-
-        # Zone de choix unique (stack)
-        self._type_stack = QStackedWidget()
-
-        # Page 0 : catégories
-        self._type_page_niv1 = QWidget()
-        cat_grid = QGridLayout(self._type_page_niv1)
-        cat_grid.setSpacing(10)
-        cats = list(self._type_hierarchy.keys())
-        for idx, cat in enumerate(cats):
-            bg = self._cat_colors.get(cat, '#888')
-            fg = '#fff' if cat != 'Suivi' else '#222'
-            btn = QPushButton(cat)
-            btn.setCheckable(True)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(64)
-            btn.setStyleSheet(
-                f"QPushButton {{ background: {bg}; color: {fg}; font-weight: bold; "
-                f"border: 2px solid {p.outline_variant}; border-radius: 10px; "
-                f"font-size: {s(12)}px; padding: 8px 12px; }}"
-                f"QPushButton:hover {{ border: 2px solid #fff; }}"
-                f"QPushButton:checked {{ border: 3px solid #fff; background: {bg}; }}"
-            )
-            btn.toggled.connect(lambda checked, c=cat: self._on_cat_toggled(c) if checked else None)
-            self._cat_group.addButton(btn)
-            cat_grid.addWidget(btn, idx // 2, idx % 2)
-        self._type_stack.addWidget(self._type_page_niv1)
-
-        # Page 1 : niveau 2
-        self._type_page_niv2 = QWidget()
-        self._niv2_layout = QVBoxLayout(self._type_page_niv2)
-        self._niv2_layout.setContentsMargins(0, 0, 0, 0)
-        self._niv2_grid = QGridLayout()
-        self._niv2_grid.setSpacing(8)
-        self._niv2_layout.addLayout(self._niv2_grid)
-        self._type_stack.addWidget(self._type_page_niv2)
-
-        # Page 2 : niveau 3
-        self._type_page_niv3 = QWidget()
-        self._niv3_layout = QVBoxLayout(self._type_page_niv3)
-        self._niv3_layout.setContentsMargins(0, 0, 0, 0)
-        self._niv3_grid = QGridLayout()
-        self._niv3_grid.setSpacing(8)
-        self._niv3_layout.addLayout(self._niv3_grid)
-        self._type_stack.addWidget(self._type_page_niv3)
-
-        self._type_stack.setCurrentIndex(0)
-        self._type_stack.setMinimumHeight(200)
-        layout.addWidget(self._type_stack, 1)
-
-        # --- 6. Note ---
-        layout.addSpacing(sp)
-        layout.addWidget(QLabel(f"<b>{_('event.note')}</b>"))
-        self._note_input = QTextEdit()
-        self._note_input.setPlaceholderText(_("event.note_placeholder"))
-        self._note_input.setMaximumHeight(80)
-        self._note_input.setStyleSheet(
-            f"padding: 4px; border: 1px solid {p.outline_variant}; border-radius: {rd}px; "
-            f"font-size: {s(fs)}px; background: {p.surface}; color: {p.text_strong};")
-        layout.addWidget(self._note_input)
-
-        # --- 6. Boutons ---
-        layout.addSpacing(sp)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.setStyleSheet(f"font-size: {s(fs)}px;")
-        buttons.accepted.connect(self._validate)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-        self.setLayout(layout)
-
-    def _load_subjects(self):
-        self._clear_grid(self._subject_grid)
-        if not self._student_classroom_id:
-            return
-        term_id = self._get_term_id()
-        self._subjects = self._loader.get_classroom_subjects(self._student_classroom_id, term_id)
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        subj_style = (
-            f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
-            f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
-            f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
-            f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
-            f"QPushButton:checked {{ background: {p.primary_container}; "
-            f"border: 2px solid {p.primary}; }}"
-        )
-        for idx, (sid, label, tid, tname) in enumerate(self._subjects):
-            display = label
-            btn = QPushButton(display)
-            btn.setCheckable(True)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(60)
-            tip = tname or ""
-            btn.setToolTip(tip)
-            btn.setStyleSheet(subj_style)
-            self._subject_group.addButton(btn, sid)
-            self._subject_grid.addWidget(btn, idx // 4, idx % 4)
+            self._student_classroom_id = data["classroom_id"]
+            self._student_classroom_label = data["label"]
 
     def _load_locations(self):
         self._locations = self._loader.get_locations()
 
-    def _on_lieu_changed(self, btn):
-        lid = self._lieu_group.id(btn)
-        self._selected_lieu_id = lid
-        self._selected_lieu_label = btn.text()
-        self._refresh_matiere_visibility()
-
-    def _refresh_matiere_visibility(self):
-        is_classroom = self._selected_lieu_id in self._classroom_lieu_ids
-        visible = self._student_classroom_label and is_classroom
-        self._matiere_group_widget.setVisible(visible)
-
-    def _update_source_label(self):
-        intranet_ok, _ignore = detect_network()
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        if intranet_ok and db.is_server_connected:
-            self._source_label.setText(_("event.source_intranet"))
-            self._source_label.setStyleSheet(f"color: {p.success}; font-size: {s(10)}px;")
-        else:
-            self._source_label.setText(_("event.source_cloud"))
-            self._source_label.setStyleSheet(f"color: {p.primary}; font-size: {s(10)}px;")
-
     def _load_types_from_db(self):
         self._type_hierarchy = self._loader.get_event_types_tree()
+        raw = self._type_hierarchy.get("Suivi", {}).get("Absence", [])
+        self._absence_types = (
+            raw if isinstance(raw, list) else list(raw.keys()) if isinstance(raw, dict) else []
+        )
+        if not self._absence_types:
+            self._absence_types = [
+                _("event.absence_fallback"),
+                _("event.absence_fallback2"),
+                _("event.absence_fallback3"),
+                _("event.absence_fallback4"),
+            ]
 
-    def _on_cat_toggled(self, category: str):
-        self._selected_category = category
-        self._selected_niv2 = None
-        self._selected_type_path = category
-        self._populate_niv2(category)
-        self._update_selection()
+    # ── UI ──
 
-    def _populate_niv2(self, category: str):
-        self._clear_grid(self._niv2_grid)
-        niv2s = self._type_hierarchy.get(category, {})
-        if not niv2s:
-            self._type_stack.setCurrentIndex(0)
+    def _init_ui(self):
+        phi = self._phi
+        c = phi.colors
+        sp = phi.spacing.spacing
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(
+            sp(SpacingToken.LG), sp(SpacingToken.LG), sp(SpacingToken.LG), sp(SpacingToken.LG)
+        )
+        outer.setSpacing(sp(SpacingToken.MD))
+
+        # ── Breadcrumb bar ──
+        self._crumb_widget = QWidget()
+        self._crumb_layout = QHBoxLayout(self._crumb_widget)
+        self._crumb_layout.setContentsMargins(0, 0, 0, 0)
+        self._crumb_layout.setSpacing(sp(SpacingToken.XS))
+        self._crumb_widget.hide()
+        outer.addWidget(self._crumb_widget)
+
+        # ── Step container (espace unique réinitialisé à chaque étape) ──
+        self._step_card = M3Card(theme=phi, variant=CardVariant.ELEVATED, parent=self)
+        sl = self._step_card.content_layout()
+        sl.setContentsMargins(
+            sp(SpacingToken.LG), sp(SpacingToken.LG), sp(SpacingToken.LG), sp(SpacingToken.LG)
+        )
+        self._step_grid = QGridLayout()
+        self._step_grid.setSpacing(sp(SpacingToken.SM))
+        sl.addLayout(self._step_grid)
+        outer.addWidget(self._step_card)
+
+        # ── Badge (résumé de l'événement) ──
+        self._bd = M3Card(theme=phi, variant=CardVariant.FILLED, parent=self)
+        bdl = self._bd.content_layout()
+        bdl.setContentsMargins(
+            sp(SpacingToken.XL), sp(SpacingToken.SM), sp(SpacingToken.XL), sp(SpacingToken.SM)
+        )
+        self._btxt = M3Label("", theme=phi, style="title_medium")
+        self._btxt.setAlignment(Qt.AlignCenter)
+        bdl.addWidget(self._btxt)
+        self._bd.hide()
+        outer.addWidget(self._bd)
+
+        # ── Final section (date / note / actions) ──
+        self._final = QWidget()
+        fl = QVBoxLayout(self._final)
+        fl.setContentsMargins(0, 0, 0, 0)
+        fl.setSpacing(sp(SpacingToken.MD))
+
+        dr = QHBoxLayout()
+        dr.setSpacing(sp(SpacingToken.MD))
+        dr.addWidget(M3Label(_("event.date"), theme=phi, style="body_medium"))
+        self._date_edit = QDateEdit(QDate.currentDate())
+        self._date_edit.setCalendarPopup(True)
+        self._date_edit.setDisplayFormat("dddd dd MMMM yyyy")
+        self._date_edit.setStyleSheet(
+            f"QDateEdit {{ padding: {sp(SpacingToken.MD)}px; border: 1px solid {c.outline_variant}; "
+            f"border-radius: {sp(SpacingToken.XS)}px; font-size: 13px; "
+            f"background: {c.surface}; color: {c.on_surface}; font-weight: bold; }}"
+        )
+        dr.addWidget(self._date_edit, 2)
+        dr.addWidget(M3Label(_("event.time"), theme=phi, style="body_medium"))
+        self._time_edit = QTimeEdit(QTime.currentTime())
+        self._time_edit.setDisplayFormat("HH:mm")
+        self._time_edit.setStyleSheet(
+            f"QTimeEdit {{ padding: {sp(SpacingToken.MD)}px; border: 1px solid {c.outline_variant}; "
+            f"border-radius: {sp(SpacingToken.XS)}px; font-size: 13px; "
+            f"background: {c.surface}; color: {c.on_surface}; font-weight: bold; }}"
+        )
+        dr.addWidget(self._time_edit, 1)
+        self._src = M3Label("", theme=phi, style="body_small")
+        self._update_source_label()
+        dr.addWidget(self._src)
+        fl.addLayout(dr)
+
+        fl.addWidget(M3Label(_("event.note"), theme=phi, style="body_medium"))
+        self._ni = M3TextField(placeholder=_("event.note_placeholder"), theme=phi)
+        fl.addWidget(self._ni)
+
+        ar = QHBoxLayout()
+        ar.addStretch()
+        cb = M3Button(_("common.button.cancel"), theme=phi, variant=ButtonVariant.OUTLINED)
+        cb.clicked.connect(self.reject)
+        ar.addWidget(cb)
+        self._vb = M3Button(_("event.validate_button"), theme=phi, variant=ButtonVariant.FILLED)
+        self._vb.clicked.connect(self._validate)
+        ar.addWidget(self._vb)
+        fl.addLayout(ar)
+
+        self._final.hide()
+        outer.addWidget(self._final)
+
+        self._show_step()
+
+    # ── Step rendering ──
+
+    def _show_step(self):
+        self._step_card.hide()
+        self._clear_grid(self._step_grid)
+        self._update_breadcrumb()
+
+        if not self._path:
+            self._show_mode_buttons()
+            self._step_card.show()
+            self._bd.hide()
+            self._final.hide()
             return
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        ncols = 3
-        for idx, niv2 in enumerate(niv2s):
-            btn = QPushButton(niv2)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(60)
-            btn.setStyleSheet(
-                f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
-                f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
-                f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
-                f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
-                f"QPushButton:checked {{ background: {p.primary_container}; "
-                f"border: 2px solid {p.primary}; }}"
-            )
-            btn.setCheckable(True)
-            btn.clicked.connect(lambda checked, n=niv2, c=category: self._on_niv2_clicked(n, c))
-            self._niv2_grid.addWidget(btn, idx // ncols, idx % ncols)
-        self._type_stack.setCurrentIndex(1)
 
-    def _on_niv2_clicked(self, niv2: str, category: str):
-        self._selected_niv2 = niv2
-        self._selected_type_path = f"{category} > {niv2}"
-        self._check_grid_button(self._niv2_grid, niv2)
-        niv3s = self._type_hierarchy.get(category, {}).get(niv2, [])
-        self._populate_niv3(niv3s)
-        self._update_selection()
-
-    def _populate_niv3(self, niv3s: list):
-        self._clear_grid(self._niv3_grid)
-        if not niv3s:
-            self._type_stack.setCurrentIndex(1)
+        if self._is_final_step():
+            self._step_card.hide()
+            self._bd_update()
+            self._bd.show()
+            self._final.show()
             return
-        p = theme_manager.palette
-        s = theme_manager.font_size
-        for idx, niv3 in enumerate(niv3s):
-            btn = QPushButton(niv3)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(60)
-            btn.setStyleSheet(
-                f"QPushButton {{ background: {p.surface}; color: {p.text_strong}; "
-                f"border: 1px solid {p.outline_variant}; border-radius: 10px; "
-                f"font-size: {s(11)}px; font-weight: bold; padding: 6px 12px; }}"
-                f"QPushButton:hover {{ border: 2px solid {p.primary}; }}"
-                f"QPushButton:checked {{ background: {p.tertiary_container}; "
-                f"border: 2px solid {p.tertiary}; }}"
+
+        if self._mode == "absence" and len(self._path) == 1:
+            self._show_absence_natures()
+        elif self._mode == "retard" and len(self._path) == 1:
+            self._show_retard_durations()
+        elif self._mode == "autres" and len(self._path) == 1:
+            self._show_locations()
+        elif self._mode == "autres" and len(self._path) == 2 and self._is_classroom():
+            self._show_subjects()
+        elif self._mode == "autres" and len(self._path) >= 2:
+            self._show_type_options()
+
+        self._step_card.show()
+        self._bd.hide()
+        self._final.hide()
+
+        self.adjustSize()
+
+    def _show_mode_buttons(self):
+        phi = self._phi
+        sp = phi.spacing.spacing
+        h = sp(SpacingToken.XL) * 2
+        for idx, (label, mode) in enumerate(
+            [
+                (_("event.mode.absence"), "absence"),
+                (_("event.mode.retard"), "retard"),
+                (_("event.mode.other"), "autres"),
+            ]
+        ):
+            b = M3Button(label, theme=phi, variant=ButtonVariant.TONAL)
+            b.setMinimumHeight(h)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda checked, l=label, m=mode: self._on_step_click(l, mode=m))
+            self._step_grid.addWidget(b, 0, idx)
+
+    def _show_absence_natures(self):
+        phi = self._phi
+        for idx, n in enumerate(self._absence_types):
+            b = M3Button(n, theme=phi, variant=ButtonVariant.TONAL)
+            b.setMinimumHeight(48)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda checked, l=n: self._on_step_click(l))
+            self._step_grid.addWidget(b, idx // 3, idx % 3)
+
+    def _show_retard_durations(self):
+        phi = self._phi
+        for idx, d in enumerate(self._RETARD_DURATIONS):
+            b = M3Button(d, theme=phi, variant=ButtonVariant.TONAL)
+            b.setMinimumHeight(48)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda checked, l=d: self._on_step_click(l))
+            self._step_grid.addWidget(b, idx // 3, idx % 3)
+
+    def _show_locations(self):
+        phi = self._phi
+        for idx, (lid, sid, lieu_name) in enumerate(self._locations):
+            b = M3Button(lieu_name, theme=phi, variant=ButtonVariant.OUTLINED)
+            b.setMinimumHeight(44)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(
+                lambda checked, l=lieu_name, lid=lid: self._on_step_click(
+                    l, lieu_id=lid, lieu_label=l
+                )
             )
-            btn.setCheckable(True)
-            btn.clicked.connect(lambda checked, n=niv3: self._on_niv3_clicked(n))
-            self._niv3_grid.addWidget(btn, 0, idx)
-        self._type_stack.setCurrentIndex(2)
+            self._step_grid.addWidget(b, idx // 3, idx % 3)
+            if sid:
+                self._classroom_lieu_ids.add(lid)
 
-    def _on_niv3_clicked(self, niv3: str):
-        self._selected_type_path = f"{self._selected_category} > {self._selected_niv2} > {niv3}"
-        self._check_grid_button(self._niv3_grid, niv3)
-        self._update_selection()
+    def _is_classroom(self):
+        return self._selected_lieu_id in self._classroom_lieu_ids
 
-    def _clear_grid(self, grid: QGridLayout):
-        while grid.count():
-            w = grid.takeAt(0).widget()
-            if w: w.deleteLater()
+    def _show_subjects(self):
+        phi = self._phi
+        if not self._student_classroom_id:
+            self._show_type_options()
+            return
+        term_id = self._loader.get_term_id()
+        subjects = self._loader.get_classroom_subjects(self._student_classroom_id, term_id)
+        if not subjects:
+            self._show_type_options()
+            return
+        for idx, (sid, label, tid, tname) in enumerate(subjects):
+            b = M3Button(label, theme=phi, variant=ButtonVariant.OUTLINED)
+            b.setMinimumHeight(40)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setToolTip(tname or "")
+            b.clicked.connect(lambda checked, l=label: self._on_step_click(l, subject_label=l))
+            self._step_grid.addWidget(b, idx // 4, idx % 4)
 
-    def _check_grid_button(self, grid: QGridLayout, text: str):
-        for i in range(grid.count()):
-            w = grid.itemAt(i).widget()
-            if isinstance(w, QPushButton):
-                w.setChecked(w.text() == text)
+    def _show_type_options(self):
+        phi = self._phi
+        node = self._get_type_node()
+        if node is None:
+            return
+        if isinstance(node, dict):
+            for idx, (k, v) in enumerate(node.items()):
+                bg, fg = self._CAT_COLORS.get(k, (None, None))
+                b = M3Button(k, theme=phi, variant=ButtonVariant.FILLED)
+                b.setMinimumHeight(52)
+                b.setCursor(Qt.PointingHandCursor)
+                if bg:
+                    b.setStyleSheet(f"M3Button {{ background-color: {bg}; color: {fg}; }}")
+                b.clicked.connect(lambda checked, l=k: self._on_step_click(l))
+                self._step_grid.addWidget(b, idx // 2, idx % 2)
+        elif isinstance(node, list):
+            for idx, leaf in enumerate(node):
+                b = M3Button(leaf, theme=phi, variant=ButtonVariant.TONAL)
+                b.setMinimumHeight(48)
+                b.setCursor(Qt.PointingHandCursor)
+                b.clicked.connect(lambda checked, l=leaf: self._on_step_click(l))
+                self._step_grid.addWidget(b, idx // 3, idx % 3)
 
-    def _update_selection(self):
-        if self._selected_type_path:
-            self._sel_btn.setText(f"✓ {self._selected_type_path}")
+    # ── Step click ──
+
+    def _on_step_click(self, label, **data):
+        self._path.append(label)
+        if "mode" in data:
+            self._mode = data["mode"]
+        if "lieu_id" in data:
+            self._selected_lieu_id = data["lieu_id"]
+            self._selected_lieu_label = data.get("lieu_label", label)
+        if "subject_label" in data:
+            self._selected_subject = data["subject_label"]
+        self._show_step()
+
+    # ── Breadcrumb ──
+
+    def _update_breadcrumb(self):
+        while self._crumb_layout.count():
+            item = self._crumb_layout.takeAt(0)
+            w = item.widget() if item else None
+            if w:
+                w.deleteLater()
+
+        if not self._path:
+            self._crumb_widget.hide()
+            return
+
+        phi = self._phi
+        c = phi.colors
+
+        for i, label in enumerate(self._path):
+            if i > 0:
+                sep = M3Label(">", theme=phi, style="body_medium")
+                sep.setStyleSheet(f"color: {c.outline};")
+                self._crumb_layout.addWidget(sep)
+
+            btn = QPushButton(label)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setFlat(True)
+            is_last = i == len(self._path) - 1
+            if is_last:
+                btn.setStyleSheet(
+                    f"QPushButton {{ color: {c.on_surface}; font-size: 14px; font-weight: bold; "
+                    f"border: none; background: transparent; text-align: left; padding: 4px 0; }}"
+                )
+            else:
+                btn.setStyleSheet(
+                    f"QPushButton {{ color: {c.primary}; font-size: 14px; font-weight: bold; "
+                    f"border: none; background: transparent; text-align: left; padding: 4px 0; }}"
+                    f"QPushButton:hover {{ color: {c.primary_container}; }}"
+                )
+                btn.clicked.connect(lambda checked, idx=i: self._on_crumb_click(idx))
+            self._crumb_layout.addWidget(btn)
+
+        self._crumb_layout.addStretch()
+        self._crumb_widget.show()
+
+    def _on_crumb_click(self, index):
+        self._path = self._path[: index + 1]
+        if self._mode == "autres" and len(self._path) < 2:
+            self._selected_lieu_id = 0
+        self._selected_lieu_label = ""
+        self._selected_subject = ""
+        self._show_step()
+
+    # ── Helpers ──
+
+    def _clear_grid(self, g):
+        while g.count():
+            w = g.takeAt(0).widget()
+            if w:
+                w.deleteLater()
+
+    def _type_start(self):
+        """Index dans _path où commence les types (après Autres, Lieu, [Matière])."""
+        if self._mode != "autres" or len(self._path) < 2:
+            return None
+        if self._is_classroom():
+            return 3
+        return 2
+
+    def _get_type_node(self):
+        start = self._type_start()
+        if start is None:
+            return None
+        if len(self._path) == start:
+            return self._type_hierarchy
+        node = self._type_hierarchy
+        for label in self._path[start:]:
+            if isinstance(node, dict):
+                node = node.get(label)
+            elif isinstance(node, list):
+                return None
+            else:
+                return None
+        return node
+
+    def _is_final_step(self):
+        if not self._path:
+            return False
+        if self._mode == "absence" and len(self._path) >= 2:
+            return True
+        if self._mode == "retard" and len(self._path) >= 2:
+            return True
+        if self._mode == "autres":
+            start = self._type_start()
+            if start is not None and len(self._path) > start:
+                node = self._get_type_node()
+                if node is None or not isinstance(node, (dict, list)) or len(node) == 0:
+                    return True
+        return False
+
+    def _compute_type_path(self):
+        if self._mode == "absence" and len(self._path) >= 2:
+            return f"Absence > {self._path[1]}"
+        if self._mode == "retard" and len(self._path) >= 2:
+            return f"Retard > {self._path[1]}"
+        if self._mode == "autres":
+            start = self._type_start()
+            if start is not None and len(self._path) > start:
+                return " > ".join(self._path[start:])
+        return None
+
+    # ── Badge & source ──
+
+    def _bd_update(self):
+        c = self._phi.colors
+        type_path = self._compute_type_path()
+        if not type_path:
+            self._bd.hide()
+            return
+        if self._mode == "absence":
+            self._btxt.setText(_("event.badge_absence").format(path=type_path))
+            self._btxt.setStyleSheet(f"color: {c.on_error}; font-weight: bold;")
+            self._bd.setStyleSheet(f"M3Card {{ background: {c.error}; border-radius: 12px; }}")
+        elif self._mode == "retard":
+            self._btxt.setText(_("event.badge_retard").format(path=type_path))
+            self._btxt.setStyleSheet(f"color: {c.on_tertiary}; font-weight: bold;")
+            self._bd.setStyleSheet(f"M3Card {{ background: {c.tertiary}; border-radius: 12px; }}")
         else:
-            self._sel_btn.setText("")
+            txt = _("event.badge_other").format(path=type_path)
+            if self._selected_lieu_label:
+                txt += f"  —  {self._selected_lieu_label}"
+            self._btxt.setText(txt)
+            self._btxt.setStyleSheet(f"color: {c.on_primary}; font-weight: bold;")
+            self._bd.setStyleSheet(f"M3Card {{ background: {c.primary}; border-radius: 12px; }}")
+        self._bd.show()
 
-    def _on_sel_clicked(self):
-        if not self._selected_type_path:
-            return
-        parts = self._selected_type_path.split(' > ')
-        depth = len(parts)
-        if depth == 1:
-            self._type_stack.setCurrentIndex(0)
-            self._cat_group.checkedButton().setChecked(False)
-            self._selected_category = None
-            self._selected_niv2 = None
-            self._selected_type_path = ''
-            self._update_selection()
-        elif depth == 2:
-            self._selected_niv2 = None
-            self._selected_type_path = parts[0]
-            self._populate_niv2(parts[0])
-            self._type_stack.setCurrentIndex(1)
-        elif depth == 3:
-            self._populate_niv2(parts[0])
-            self._on_niv2_clicked(parts[1], parts[0])
-            self._type_stack.setCurrentIndex(2)
+    def _update_source_label(self):
+        ok, _ign = detect_network()
+        c = self._phi.colors
+        if ok and db.is_server_connected:
+            self._src.setText(_("event.source_intranet"))
+            self._src.setStyleSheet(f"color: {c.primary}; font-weight: bold;")
+        else:
+            self._src.setText(_("event.source_cloud"))
+            self._src.setStyleSheet(f"color: {c.tertiary}; font-weight: bold;")
+
+    # ── Validate ──
 
     def _validate(self):
-        if not self._selected_type_path:
-            QMessageBox.warning(self, _("common.dialog.error_title"), _("event.select_type_required"))
+        type_path = self._compute_type_path()
+        if not type_path:
+            QMessageBox.warning(
+                self, _("common.dialog.error_title"), _("event.select_type_required")
+            )
             return
-        # Verifier date vs agenda
-        evt_date = self._date_edit.date()
-        evt_str = evt_date.toString('yyyy-MM-dd')
+        evt = self._date_edit.date().toString("yyyy-MM-dd")
         try:
             cur = db.server_conn.cursor()
             cur.execute("SELECT MAX(date_all) FROM agenda")
             r = cur.fetchone()
             if r and r[0]:
-                last_date = str(r[0])[:10]
-                if evt_str > last_date:
-                    QMessageBox.warning(self, _("common.dialog.error_title"),
-                                        f"Date hors calendrier scolaire ({last_date}). Année terminée.")
+                last = str(r[0])[:10]
+                if evt > last:
+                    QMessageBox.warning(
+                        self,
+                        _("common.dialog.error_title"),
+                        _("event.date_error").format(last=last),
+                    )
                     return
         except Exception:
             pass
@@ -432,17 +493,18 @@ class EventGenerator(QDialog):
     def get_data(self) -> dict:
         dt = self._date_edit.dateTime()
         dt.setTime(self._time_edit.time())
-        subj_id = self._subject_group.checkedId()
+        type_path = self._compute_type_path()
+        is_abs_or_ret = self._mode in ("absence", "retard")
         return {
-            'student_id': self._student_id,
-            'event_type': self._selected_type_path,
-            'event_at': dt.toString('yyyy-MM-dd HH:mm:ss'),
-            'classroom_id': self._student_classroom_id,
-            'classroom_label': self._student_classroom_label,
-            'lieu_id': self._selected_lieu_id,
-            'lieu_label': self._selected_lieu_label,
-            'subject_id': subj_id if subj_id >= 0 else None,
-            'subject_label': self._subject_group.checkedButton().text() if subj_id >= 0 else '',
-            'note': self._note_input.toPlainText().strip(),
-            'source': 'cloud' if not detect_network()[0] else 'intranet',
+            "student_id": self._student_id,
+            "event_type": type_path,
+            "event_at": dt.toString("yyyy-MM-dd HH:mm:ss"),
+            "classroom_id": self._student_classroom_id,
+            "classroom_label": self._student_classroom_label,
+            "lieu_id": self._selected_lieu_id if not is_abs_or_ret else 0,
+            "lieu_label": self._selected_lieu_label if not is_abs_or_ret else "",
+            "subject_id": None,
+            "subject_label": self._selected_subject,
+            "note": self._ni.text().strip(),
+            "source": "cloud" if not detect_network()[0] else "intranet",
         }
