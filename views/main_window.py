@@ -25,7 +25,7 @@ from PySide6.QtCharts import (
     QValueAxis,
 )
 from PySide6.QtCore import QDate, QDateTime, QSize, Qt, QTime, QTimer
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPixmap
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter
 from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
@@ -40,7 +40,6 @@ from PySide6.QtWidgets import (
 from LarcSuperviseur.common.database import db
 from LarcSuperviseur.common.event_helpers import event_color, event_icon
 from LarcSuperviseur.common.logger import log
-from LarcSuperviseur.common.photos import get_photo_path
 from LarcSuperviseur.common.session import session
 from LarcSuperviseur.common.theme import QssHelper, theme_manager
 from LarcSuperviseur.common.trace import trace
@@ -49,8 +48,8 @@ from LarcSuperviseur.views.core.cardsList.config import CARD_THEMES
 from LarcSuperviseur.views.core.time_manager import TimeManager
 from LarcSuperviseur.views.dialogs.event_generator import EventGenerator
 from LarcSuperviseur.views.dialogs.timetable_editor import TimetableEditor
-from LarcSuperviseur.views.top_bar import TopBar
 from LarcSuperviseur.views.panels.student_detail import StudentDetail
+from LarcSuperviseur.views.top_bar import TopBar
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +246,7 @@ class MainWindow(QWidget):
         self._history_table.customContextMenuRequested.connect(
             lambda pos: self._show_event_context_menu(self._history_table, pos)
         )
-        self._history_table.cellDoubleClicked.connect(self._on_event_table_dblclick)
+        self._history_table.cellDoubleClicked.connect(self._on_history_dblclick)
         self._history_layout.addWidget(history_title)
         # -- Filtres --
         filter_row = QHBoxLayout()
@@ -1488,6 +1487,50 @@ class MainWindow(QWidget):
 
         if dlg.exec() == QDialog.Accepted:
             self.refresh_all()
+
+    def _on_history_dblclick(self, row: int, col: int):
+        table = self._history_table
+        item = table.item(row, 0)
+        eid = int(item.text()) if item and item.text().isdigit() else None
+        if eid:
+            self._edit_event(eid)
+
+    def _show_event_context_menu(self, table: M3TableWidget, pos):
+        eid = self._get_event_id_from_table(table)
+        if not eid:
+            return
+        event = self._actions.get_event_by_id(eid)
+        is_validated = event is not None and event.get("validated_by") is not None
+        menu = M3Menu(self)
+        edit_action = menu.addAction(
+            md3_icon(
+                "edit", color=theme_manager.palette.text_strong, size=theme_manager.image.icon_menu
+            ),
+            _("context_menu.edit"),
+        )
+        validate_action = menu.addAction(
+            md3_icon(
+                "lock" if is_validated else "check_circle",
+                color=theme_manager.palette.text_strong,
+                size=theme_manager.image.icon_menu,
+            ),
+            _("context_menu.invalidate") if is_validated else _("context_menu.validate"),
+        )
+        delete_action = menu.addAction(
+            md3_icon(
+                "delete",
+                color=theme_manager.palette.text_strong,
+                size=theme_manager.image.icon_menu,
+            ),
+            _("context_menu.delete"),
+        )
+        chosen = menu.exec(table.viewport().mapToGlobal(pos))
+        if chosen == edit_action:
+            self._edit_event(eid)
+        elif chosen == validate_action:
+            self._toggle_validation(eid)
+        elif chosen == delete_action:
+            self._delete_event(eid)
 
     def _toggle_validation(self, event_id: int):
         conn = db.server_conn
