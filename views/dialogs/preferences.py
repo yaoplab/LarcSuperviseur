@@ -129,6 +129,23 @@ class PreferencesDialog(M3Dialog):
         trans = Translator.instance(lang)
         trans.reload(Translator.l10n_dir())
         theme_manager.set_active(session.theme_pref)
+        # Persister dans larcauth_config
+        if session.user_id:
+            try:
+                cur = db.server_conn.cursor()
+                for k, v in [
+                    ("theme_pref", session.theme_pref),
+                    ("card_theme", session.card_theme),
+                    ("fk_language", str(session.fk_language)),
+                ]:
+                    cur.execute(
+                        "INSERT INTO larcauth_config (key, value) VALUES (%s, %s) "
+                        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                        (f"user_{session.user_id}_{k}", v),
+                    )
+                db.server_conn.commit()
+            except Exception:
+                pass
         conn = db.server_conn
         if conn and session.user_id:
             try:

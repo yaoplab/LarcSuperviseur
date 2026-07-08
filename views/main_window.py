@@ -24,7 +24,7 @@ from PySide6.QtCharts import (
     QPieSeries,
     QValueAxis,
 )
-from PySide6.QtCore import QDate, QDateTime, QSettings, QSize, Qt, QTime, QTimer
+from PySide6.QtCore import QDate, QDateTime, QSize, Qt, QTime, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -370,13 +370,29 @@ class MainWindow(QWidget):
         self._cards_title.setObjectName("panel_title")
         header_row.addWidget(self._cards_title)
         header_row.addStretch()
+        # Charger les préférences utilisateur depuis la DB
+        if session.user_id:
+            try:
+                cur = db.server_conn.cursor()
+                cur.execute(
+                    "SELECT key, value FROM larcauth_config WHERE key LIKE %s",
+                    (f"user_{session.user_id}_%",),
+                )
+                for k, v in cur.fetchall():
+                    pref = k.rsplit("_", 1)[-1]
+                    if pref == "theme_pref":
+                        session.theme_pref = v
+                        theme_manager.set_active(v)
+                    elif pref == "card_theme":
+                        session.card_theme = v
+                    elif pref == "fk_language":
+                        session.fk_language = int(v)
+            except Exception:
+                pass
+
         # Boutons thèmes Phi
         self._phi_group = QButtonGroup(self)
         self._phi_group.setExclusive(True)
-        settings = QSettings("Larc", "LarcSuperviseur")
-        saved = settings.value("card_theme", "")
-        if saved:
-            session.card_theme = saved
         self._card_theme: str = session.card_theme
         for key, icon_name in [
             ("compact", "view_comfy"),
@@ -1523,7 +1539,17 @@ class MainWindow(QWidget):
     def _on_card_theme(self, key: str):
         self._card_theme = key
         session.card_theme = key
-        QSettings("Larc", "LarcSuperviseur").setValue("card_theme", key)
+        if session.user_id:
+            try:
+                cur = db.server_conn.cursor()
+                cur.execute(
+                    "INSERT INTO larcauth_config (key, value) VALUES (%s, %s) "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                    (f"user_{session.user_id}_card_theme", key),
+                )
+                db.server_conn.commit()
+            except Exception:
+                pass
         if self._current_class_id:
             self._load_students(self._current_class_id)
 
