@@ -24,7 +24,7 @@ from PySide6.QtCharts import (
     QPieSeries,
     QValueAxis,
 )
-from PySide6.QtCore import QDate, QDateTime, QSize, Qt, QTime, QTimer
+from PySide6.QtCore import QDate, QDateTime, QSettings, QSize, Qt, QTime, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -373,6 +373,10 @@ class MainWindow(QWidget):
         # Boutons thèmes Phi
         self._phi_group = QButtonGroup(self)
         self._phi_group.setExclusive(True)
+        settings = QSettings("Larc", "LarcSuperviseur")
+        saved = settings.value("card_theme", "")
+        if saved:
+            session.card_theme = saved
         self._card_theme: str = session.card_theme
         for key, icon_name in [
             ("compact", "view_comfy"),
@@ -1516,6 +1520,7 @@ class MainWindow(QWidget):
     def _on_card_theme(self, key: str):
         self._card_theme = key
         session.card_theme = key
+        QSettings("Larc", "LarcSuperviseur").setValue("card_theme", key)
         if self._current_class_id:
             self._load_students(self._current_class_id)
 
