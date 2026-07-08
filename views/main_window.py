@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QMessageBox,
+    QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
@@ -475,6 +476,12 @@ class MainWindow(QWidget):
 
         outer.addLayout(main_h)
         self.setLayout(outer)
+        self._compact_tables()
+
+    def _compact_tables(self):
+        for table in self.findChildren(QTableWidget):
+            table.verticalHeader().setDefaultSectionSize(22)
+            table.verticalHeader().setMinimumSectionSize(18)
 
     def _build_student_detail(self):
         self._student_detail = StudentDetail()
