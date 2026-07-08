@@ -69,11 +69,6 @@ class StudentDetail(QWidget):
         hdr = QHBoxLayout()
         hdr.setSpacing(8)
 
-        self._back_btn = M3Button("←", variant=ButtonVariant.TEXT)
-        self._back_btn.setCursor(Qt.PointingHandCursor)
-        self._back_btn.clicked.connect(self._on_back)
-        hdr.addWidget(self._back_btn)
-
         self._sd_photo = QLabel()
         self._sd_photo.setFixedSize(89, 89)
         self._sd_photo.setStyleSheet(

@@ -227,6 +227,8 @@ class EventGenerator(QDialog):
             self._show_absence_natures()
         elif self._mode == "retard" and len(self._path) == 1:
             self._show_retard_durations()
+        elif self._mode == "retard" and len(self._path) == 2:
+            self._show_subjects()
         elif self._mode == "autres" and len(self._path) == 1:
             self._show_locations()
         elif self._mode == "autres" and len(self._path) == 2 and self._is_classroom():
@@ -430,7 +432,7 @@ class EventGenerator(QDialog):
             return False
         if self._mode == "absence" and len(self._path) >= 2:
             return True
-        if self._mode == "retard" and len(self._path) >= 2:
+        if self._mode == "retard" and len(self._path) >= 3:
             return True
         if self._mode == "autres":
             start = self._type_start()
@@ -443,8 +445,8 @@ class EventGenerator(QDialog):
     def _compute_type_path(self):
         if self._mode == "absence" and len(self._path) >= 2:
             return f"Absence > {self._path[1]}"
-        if self._mode == "retard" and len(self._path) >= 2:
-            return f"Retard > {self._path[1]}"
+        if self._mode == "retard" and len(self._path) >= 3:
+            return f"Retard > {self._path[1]} > {self._path[2]}"
         if self._mode == "autres":
             start = self._type_start()
             if start is not None and len(self._path) > start:
