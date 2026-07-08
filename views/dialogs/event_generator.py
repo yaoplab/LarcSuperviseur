@@ -30,7 +30,6 @@ class EventGenerator(QDialog):
         "Sortie": ("#e65100", "#ffffff"),
         "Suivi": ("#f9a825", "#222222"),
     }
-    _RETARD_DURATIONS = ["5 mn", "10 min", "15 min", "30 min", "45 min", "01h00"]
 
     def __init__(self, student_id: int, parent=None):
         super().__init__(parent)
@@ -68,23 +67,34 @@ class EventGenerator(QDialog):
 
     def _load_types_from_db(self):
         conn = db.server_conn
-        if not conn:
-            self._absence_types = [_("event.absence_fallback")]
-            self._retard_durations = self._RETARD_DURATIONS
-            return
         lang = getattr(session, "fk_language", 2)
+        if not conn:
+            return
         try:
             cur = conn.cursor()
             cur.execute(
-                "SELECT type_event, Ststus_Niveau2 FROM larcauth_type_status "
+                "SELECT DISTINCT type_event FROM larcauth_type_status "
                 "WHERE fk_language = %s AND Enabled = TRUE ORDER BY idtypeevent",
+                (lang,),
+            )
+            mode_map = {"Absence": "absence", "Retard": "retard"}
+            self._modes = []
+            for (type_evt,) in cur.fetchall():
+                cat = type_evt.strip()
+                key = next((v for k, v in mode_map.items() if k in cat), None)
+                if not key:
+                    key = "autres"
+                self._modes.append((cat, key))
+
+            cur.execute(
+                "SELECT type_event, Ststus_Niveau2 FROM larcauth_type_status "
+                "WHERE fk_language = %s AND Enabled = TRUE AND Ststus_Niveau2 IS NOT NULL "
+                "ORDER BY idtypeevent",
                 (lang,),
             )
             self._absence_types = []
             self._retard_durations = []
             for type_evt, niveau2 in cur.fetchall():
-                if not niveau2:
-                    continue
                 if "Absence" in type_evt or "absence" in type_evt.lower():
                     self._absence_types.append(niveau2.strip())
                 elif "Retard" in type_evt or "Tardiness" in type_evt:
@@ -230,15 +240,10 @@ class EventGenerator(QDialog):
 
     def _show_mode_buttons(self):
         phi = self._phi
-        sp = phi.spacing.spacing
-        h = sp(SpacingToken.XL) * 2
-        for idx, (label, mode) in enumerate(
-            [
-                (_("event.mode.absence"), "absence"),
-                (_("event.mode.retard"), "retard"),
-                (_("event.mode.other"), "autres"),
-            ]
-        ):
+        h = phi.spacing.spacing(SpacingToken.XL) * 2
+        modes = self._modes
+        h = phi.spacing.spacing(SpacingToken.XL) * 2
+        for idx, (label, mode) in enumerate(modes):
             b = M3Button(label, theme=phi, variant=ButtonVariant.TONAL)
             b.setMinimumHeight(h)
             b.setCursor(Qt.PointingHandCursor)
@@ -256,7 +261,7 @@ class EventGenerator(QDialog):
 
     def _show_retard_durations(self):
         phi = self._phi
-        for idx, d in enumerate(self._RETARD_DURATIONS):
+        for idx, d in enumerate(self._retard_durations):
             b = M3Button(d, theme=phi, variant=ButtonVariant.TONAL)
             b.setMinimumHeight(48)
             b.setCursor(Qt.PointingHandCursor)
