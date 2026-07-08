@@ -89,8 +89,8 @@ class EventGenerator(QDialog):
                 self._modes.append((cat, key))
 
             cur.execute(
-                'SELECT type_event, Ststus_Niveau2 FROM larcauth_type_status '
-                'WHERE fk_language = %s AND "Enabled" = TRUE AND Ststus_Niveau2 IS NOT NULL '
+                'SELECT type_event, "Ststus_Niveau2" FROM larcauth_type_status '
+                'WHERE fk_language = %s AND "Enabled" = TRUE AND "Ststus_Niveau2" IS NOT NULL '
                 'ORDER BY idtypeevent',
                 (lang,),
             )
