@@ -1398,6 +1398,8 @@ class MainWindow(QWidget):
 
     def _load_student_detail(self, student_id: int):
         self._student_detail.load(student_id)
+        self._student_detail.show()
+        self._class_stack.setCurrentWidget(self._student_detail)
 
     def _get_event_id_from_table(self, table: M3TableWidget) -> int | None:
         idx = table.currentRow()
