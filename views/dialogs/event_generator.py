@@ -81,7 +81,7 @@ class EventGenerator(QDialog):
             )
             mode_map = {"Absence": "absence", "Retard": "retard"}
             self._modes = []
-            for (type_evt,) in cur.fetchall():
+            for (type_evt, _) in cur.fetchall():
                 cat = type_evt.strip()
                 key = next((v for k, v in mode_map.items() if k in cat), None)
                 if not key:
