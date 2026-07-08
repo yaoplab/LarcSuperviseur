@@ -437,8 +437,9 @@ class MainWindow(QWidget):
         # Row cartes (3/4) + absents (1/4)
         self._class_absents_group.setVisible(False)
         cards_absents_row = QHBoxLayout()
+        cards_absents_row.setAlignment(Qt.AlignTop)
         cards_absents_row.addWidget(self._cards_scroll, 3)
-        cards_absents_row.addWidget(self._class_absents_group, 1)
+        cards_absents_row.addWidget(self._class_absents_group, 1, Qt.AlignTop)
         cards_frame_layout.addLayout(cards_absents_row)
         self._class_stack.addWidget(cards_frame)  # index 0
 
