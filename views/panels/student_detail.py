@@ -10,6 +10,7 @@ from phibuilder.widgets import (
     M3TableWidget,
     M3TabWidget,
 )
+from phibuilder.widgets.button import ButtonVariant
 from PySide6.QtCharts import (
     QBarCategoryAxis,
     QBarSeries,
@@ -22,7 +23,9 @@ from PySide6.QtCharts import (
 from PySide6.QtCore import QDate, QDateTime, Qt, QTime, Signal
 from PySide6.QtGui import QBrush, QColor, QPainter, QPixmap
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
+    QLabel,
     QMessageBox,
     QPushButton,
     QTableWidgetItem,
@@ -58,32 +61,49 @@ class StudentDetail(QWidget):
     def _init_ui(self):
         p = theme_manager.palette
         s = theme_manager.font_size
+        d = theme_manager.design
         self.setObjectName("panel")
         sd_layout = QVBoxLayout(self)
         sd_layout.setContentsMargins(6, 6, 6, 6)
         sd_layout.setSpacing(6)
 
-        # ── Header: back + nom/photo + add event ──
+        # ── Header: photo + nom + KPIs + add event ──
         hdr = QHBoxLayout()
-        self._back_btn = QPushButton(f" {_('student.back')}")
-        self._back_btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: {p.primary}; border: none; "
-            f"font-weight: bold; font-size: {s(11)}px; padding: 2px 6px; }}"
-            f"QPushButton:hover {{ color: {p.active}; }}")
+        hdr.setSpacing(8)
+
+        self._back_btn = M3Button("←", variant=ButtonVariant.TEXT)
         self._back_btn.setCursor(Qt.PointingHandCursor)
         self._back_btn.clicked.connect(self._on_back)
         hdr.addWidget(self._back_btn)
 
-        self._sd_photo = M3Label()
-        self._sd_photo.setFixedSize(55, 55)
-        self._sd_photo.setStyleSheet(f"background: {p.surface_variant}; border-radius: 8px;")
+        self._sd_photo = QLabel()
+        self._sd_photo.setFixedSize(89, 89)
+        self._sd_photo.setStyleSheet(f"background: {p.primary_container}; border-radius: {d.radius_lg}px;")
         self._sd_photo.setAlignment(Qt.AlignCenter)
         hdr.addWidget(self._sd_photo)
 
         self._sd_header = M3Label()
-        self._sd_header.setStyleSheet(f"font-size: {s(16)}px; font-weight: bold; color: {p.text_strong};")
-        hdr.addWidget(self._sd_header)
-        hdr.addStretch()
+        self._sd_header.setStyleSheet(f"font-size: {s(21)}px; font-weight: bold; color: {p.text_strong};")
+        hdr.addWidget(self._sd_header, 1)
+
+        # KPIs inline
+        self._sd_kpis = {}
+        for k, lbl in [("abs", _("chart.absences")), ("exit", _("kpi.exit")), ("total", _("kpi.total_events"))]:
+            f = QFrame()
+            f.setObjectName("kpi_small")
+            f.setStyleSheet(f"QFrame {{ background: {p.surface_variant}; border-radius: 6px; padding: 4px 12px; }}")
+            fl = QVBoxLayout(f)
+            fl.setContentsMargins(4, 2, 4, 2)
+            v = QLabel("—")
+            v.setStyleSheet(f"font-size: {s(18)}px; font-weight: bold; color: {p.primary};")
+            v.setAlignment(Qt.AlignCenter)
+            l = QLabel(lbl)
+            l.setStyleSheet(f"font-size: {s(9)}px; color: {p.text_soft};")
+            l.setAlignment(Qt.AlignCenter)
+            fl.addWidget(v)
+            fl.addWidget(l)
+            self._sd_kpis[k] = v
+            hdr.addWidget(f)
 
         self._sd_add_btn = QPushButton("+")
         self._sd_add_btn.setFixedSize(34, 34)
@@ -96,29 +116,6 @@ class StudentDetail(QWidget):
         self._sd_add_btn.clicked.connect(self._on_add_event)
         hdr.addWidget(self._sd_add_btn)
         sd_layout.addLayout(hdr)
-
-        # ── KPIs ──
-        kpi_row = QHBoxLayout()
-        kpi_row.setSpacing(6)
-        self._sd_kpis = {}
-        for k, lbl in [("abs", _("chart.absences")), ("exit", _("kpi.exit")), ("total", _("kpi.total_events"))]:
-            f = M3Frame()
-            f.setObjectName("kpi_small")
-            f.setStyleSheet(f"QFrame {{ background: {p.surface_variant}; border-radius: 6px; padding: 4px 12px; }}")
-            fl = QVBoxLayout(f)
-            fl.setContentsMargins(4, 2, 4, 2)
-            v = M3Label("—")
-            v.setStyleSheet(f"font-size: {s(18)}px; font-weight: bold; color: {p.primary};")
-            v.setAlignment(Qt.AlignCenter)
-            l = M3Label(lbl)
-            l.setStyleSheet(f"font-size: {s(9)}px; color: {p.text_soft};")
-            l.setAlignment(Qt.AlignCenter)
-            fl.addWidget(v)
-            fl.addWidget(l)
-            self._sd_kpis[k] = v
-            kpi_row.addWidget(f)
-        kpi_row.addStretch()
-        sd_layout.addLayout(kpi_row)
 
         # ── Contenu : événements (8) + graphiques (5) ──
         content = QHBoxLayout()
@@ -194,7 +191,7 @@ class StudentDetail(QWidget):
 
         pix = QPixmap(get_photo_path(student_id))
         if not pix.isNull():
-            self._sd_photo.setPixmap(pix.scaled(55, 55, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self._sd_photo.setPixmap(pix.scaled(89, 89, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
         kpi = self._loader.get_student_kpis(student_id, date_from, date_to)
         self._sd_kpis["abs"].setText(str(kpi.get("abs_count", 0)))
