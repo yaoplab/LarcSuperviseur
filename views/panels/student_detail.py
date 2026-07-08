@@ -83,8 +83,20 @@ class StudentDetail(QWidget):
         )
         hdr.addWidget(self._sd_header, 1)
 
-        # KPIs inline
+        # KPIs inline — period first, then stats
         self._sd_kpis = {}
+        # Period label
+        period_f = QFrame()
+        period_f.setObjectName("kpi_small")
+        period_f.setStyleSheet(f"QFrame {{ background: {p.surface_variant}; border-radius: 6px; padding: 4px 12px; }}")
+        period_fl = QVBoxLayout(period_f)
+        period_fl.setContentsMargins(4, 2, 4, 2)
+        self._sd_period_val = QLabel("—")
+        self._sd_period_val.setStyleSheet(f"font-size: {s(24)}px; font-weight: bold; color: {p.text_strong};")
+        self._sd_period_val.setAlignment(Qt.AlignCenter)
+        period_fl.addWidget(self._sd_period_val)
+        hdr.addWidget(period_f)
+
         for k, lbl in [
             ("abs", _("chart.absences")),
             ("exit", _("kpi.exit")),
@@ -333,7 +345,8 @@ class StudentDetail(QWidget):
                 return
             self.load(sid)
 
-    def _on_back(self):
+    def set_period_label(self, label: str):
+        self._sd_period_val.setText(label)
         self._sd_placeholder.setVisible(True)
         self._sd_chart_tabs.hide()
         self.back_requested.emit()

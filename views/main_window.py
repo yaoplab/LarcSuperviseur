@@ -186,10 +186,23 @@ class MainWindow(QWidget):
         group_layout.setContentsMargins(0, 0, 0, 0)
         group_layout.setSpacing(8)
 
-        # -- Ligne KPIs (4 cartes) --
+        # -- Ligne KPIs --
         kpi_row = QHBoxLayout()
         kpi_row.setSpacing(8)
         self._kpi_cards = {}
+        # Period label
+        self._kpi_period = M3Label("—")
+        self._kpi_period.setObjectName("kpi_value")
+        self._kpi_period.setAlignment(Qt.AlignCenter)
+        period_card = M3Frame()
+        period_card.setObjectName("kpi_card")
+        period_card.setFixedHeight(80)
+        pcl = QVBoxLayout(period_card)
+        pcl.setContentsMargins(8, 4, 8, 4)
+        pcl.addWidget(self._kpi_period)
+        pcl.addWidget(M3Label(_("kpi.period")))
+        kpi_row.addWidget(period_card)
+
         for k, label in [
             ("total", _("kpi.total")),
             ("present", _("kpi.present")),
@@ -802,6 +815,7 @@ class MainWindow(QWidget):
             total_events = sum(r[2] for r in rows)
 
             self._kpi_cards["total"].setText(str(total_students))
+            self._kpi_period.setText(self._time_manager.current_period)
             present_val = max(0, total_students - total_abs) if total_abs > 0 else total_students
             self._kpi_cards["present"].setText(str(present_val))
             self._kpi_cards["absent"].setText(str(total_abs))
@@ -1407,6 +1421,7 @@ class MainWindow(QWidget):
             self._load_student_detail(sid)
 
     def _load_student_detail(self, student_id: int):
+        self._student_detail.set_period_label(self._time_manager.current_period)
         self._student_detail.load(student_id)
         self._student_detail.show()
         self._class_stack.setCurrentWidget(self._student_detail)
