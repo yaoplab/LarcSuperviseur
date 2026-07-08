@@ -149,7 +149,7 @@ class StudentDetail(QWidget):
         content.addLayout(left, 8)
 
         # Colonne droite : graphiques dans des onglets
-        self._sd_chart_tabs = M3TabWidget()
+        self._sd_chart_tabs = M3TabWidget(parent=self)
         self._sd_chart_tabs.setDocumentMode(True)
 
         # Onglet 1 : Donut répartition par type
