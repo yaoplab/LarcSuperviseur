@@ -2,11 +2,9 @@ from larccommon.l10n import _
 from phibuilder.widgets import (
     M3Button,
     M3Dialog,
-    M3Frame,
     M3HeaderView,
     M3Label,
     M3Menu,
-    M3ScrollArea,
     M3TableWidget,
     M3TabWidget,
 )
@@ -20,7 +18,7 @@ from PySide6.QtCharts import (
     QPieSeries,
     QValueAxis,
 )
-from PySide6.QtCore import QDate, QDateTime, Qt, QTime, Signal
+from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
@@ -78,27 +76,37 @@ class StudentDetail(QWidget):
 
         self._sd_photo = QLabel()
         self._sd_photo.setFixedSize(89, 89)
-        self._sd_photo.setStyleSheet(f"background: {p.primary_container}; border-radius: {d.radius_lg}px;")
+        self._sd_photo.setStyleSheet(
+            f"background: {p.primary_container}; border-radius: {d.radius_lg}px;"
+        )
         self._sd_photo.setAlignment(Qt.AlignCenter)
         hdr.addWidget(self._sd_photo)
 
         self._sd_header = M3Label()
-        self._sd_header.setStyleSheet(f"font-size: {s(21)}px; font-weight: bold; color: {p.text_strong};")
+        self._sd_header.setStyleSheet(
+            f"font-size: {s(21)}px; font-weight: bold; color: {p.text_strong};"
+        )
         hdr.addWidget(self._sd_header, 1)
 
         # KPIs inline
         self._sd_kpis = {}
-        for k, lbl in [("abs", _("chart.absences")), ("exit", _("kpi.exit")), ("total", _("kpi.total_events"))]:
+        for k, lbl in [
+            ("abs", _("chart.absences")),
+            ("exit", _("kpi.exit")),
+            ("total", _("kpi.total_events")),
+        ]:
             f = QFrame()
             f.setObjectName("kpi_small")
-            f.setStyleSheet(f"QFrame {{ background: {p.surface_variant}; border-radius: 6px; padding: 4px 12px; }}")
+            f.setStyleSheet(
+                f"QFrame {{ background: {p.surface_variant}; border-radius: 6px; padding: 4px 12px; }}"
+            )
             fl = QVBoxLayout(f)
             fl.setContentsMargins(4, 2, 4, 2)
             v = QLabel("—")
-            v.setStyleSheet(f"font-size: {s(18)}px; font-weight: bold; color: {p.primary};")
+            v.setStyleSheet(f"font-size: {s(24)}px; font-weight: bold; color: {p.primary};")
             v.setAlignment(Qt.AlignCenter)
             l = QLabel(lbl)
-            l.setStyleSheet(f"font-size: {s(9)}px; color: {p.text_soft};")
+            l.setStyleSheet(f"font-size: {s(11)}px; color: {p.text_soft};")
             l.setAlignment(Qt.AlignCenter)
             fl.addWidget(v)
             fl.addWidget(l)
@@ -109,8 +117,9 @@ class StudentDetail(QWidget):
         self._sd_add_btn.setFixedSize(34, 34)
         self._sd_add_btn.setStyleSheet(
             f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
-            f"border: none; border-radius: 17px; font-size: {s(20)}px; font-weight: bold; }}"
-            f"QPushButton:hover {{ background: {p.active}; }}")
+            f"border: none; border-radius: 17px; font-size: {s(22)}px; font-weight: bold; }}"
+            f"QPushButton:hover {{ background: {p.active}; }}"
+        )
         self._sd_add_btn.setCursor(Qt.PointingHandCursor)
         self._sd_add_btn.setToolTip(_("student.add_event"))
         self._sd_add_btn.clicked.connect(self._on_add_event)
@@ -128,15 +137,16 @@ class StudentDetail(QWidget):
         left.addWidget(evt_label)
         self._sd_events = M3TableWidget()
         self._sd_events.setAlternatingRowColors(True)
-        self._sd_events.setStyleSheet(
-            f"QTableWidget::item {{ padding: 1px 6px; }}")
+        self._sd_events.setStyleSheet("QTableWidget::item { padding: 1px 6px; }")
         self._sd_events.verticalHeader().setDefaultSectionSize(22)
         self._sd_events.verticalHeader().setMinimumSectionSize(18)
         self._sd_events.horizontalHeader().setStretchLastSection(True)
         self._sd_events.setEditTriggers(M3TableWidget.NoEditTriggers)
         self._sd_events.setSelectionBehavior(M3TableWidget.SelectRows)
         self._sd_events.setContextMenuPolicy(Qt.CustomContextMenu)
-        self._sd_events.customContextMenuRequested.connect(lambda pos: self._show_context_menu(self._sd_events, pos))
+        self._sd_events.customContextMenuRequested.connect(
+            lambda pos: self._show_context_menu(self._sd_events, pos)
+        )
         self._sd_events.cellDoubleClicked.connect(self._on_event_table_dblclick)
         self._sd_events.setSortingEnabled(True)
         left.addWidget(self._sd_events, 1)
@@ -190,12 +200,14 @@ class StudentDetail(QWidget):
         if not info:
             return
 
-        name = f"{info['first_name']} {info['last_name']}"
+        name = info["class_label"] + " — " + f"{info['first_name']} {info['last_name']}"
         self._sd_header.setText(f"<b>{name}</b>  {info['class_label']}")
 
         pix = QPixmap(get_photo_path(student_id))
         if not pix.isNull():
-            self._sd_photo.setPixmap(pix.scaled(89, 89, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self._sd_photo.setPixmap(
+                pix.scaled(89, 89, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
 
         kpi = self._loader.get_student_kpis(student_id, date_from, date_to)
         self._sd_kpis["abs"].setText(str(kpi.get("abs_count", 0)))
@@ -206,10 +218,18 @@ class StudentDetail(QWidget):
         evts = self._loader.get_student_events(student_id)
         self._sd_events.setRowCount(len(evts))
         self._sd_events.setColumnCount(8)
-        self._sd_events.setHorizontalHeaderLabels([
-            _("table.id"), _("table.type"), _("table.location"), _("table.subject"),
-            _("table.date"), _("table.note"), _("table.created_by"), _("table.validated"),
-        ])
+        self._sd_events.setHorizontalHeaderLabels(
+            [
+                _("table.id"),
+                _("table.type"),
+                _("table.location"),
+                _("table.subject"),
+                _("table.date"),
+                _("table.note"),
+                _("table.created_by"),
+                _("table.validated"),
+            ]
+        )
         self._sd_events.setColumnHidden(0, True)
         for i, evt in enumerate(evts):
             ei = event_icon(evt["event_type"])
@@ -219,7 +239,9 @@ class StudentDetail(QWidget):
                 QTableWidgetItem(f"{ei} {evt['event_type']}"),
                 QTableWidgetItem(evt.get("lieu_label") or ""),
                 QTableWidgetItem(evt.get("subject_label") or ""),
-                QTableWidgetItem(evt["event_at"].strftime("%d/%m %H:%M") if evt.get("event_at") else ""),
+                QTableWidgetItem(
+                    evt["event_at"].strftime("%d/%m %H:%M") if evt.get("event_at") else ""
+                ),
                 QTableWidgetItem(evt.get("note") or ""),
                 QTableWidgetItem(evt.get("creator")),
                 QTableWidgetItem("\u2713" if evt.get("validated_by") else ""),
@@ -231,14 +253,21 @@ class StudentDetail(QWidget):
                 it.setFlags(it.flags() & ~Qt.ItemIsEditable)
                 self._sd_events.setItem(i, j, it)
         hh = self._sd_events.horizontalHeader()
-        hh.setSectionResizeMode(0, M3HeaderView.Fixed); self._sd_events.setColumnWidth(0, 0)
-        hh.setSectionResizeMode(1, M3HeaderView.Interactive); self._sd_events.setColumnWidth(1, 280)
-        hh.setSectionResizeMode(2, M3HeaderView.Interactive); self._sd_events.setColumnWidth(2, 110)
-        hh.setSectionResizeMode(3, M3HeaderView.Interactive); self._sd_events.setColumnWidth(3, 100)
-        hh.setSectionResizeMode(4, M3HeaderView.Interactive); self._sd_events.setColumnWidth(4, 100)
+        hh.setSectionResizeMode(0, M3HeaderView.Fixed)
+        self._sd_events.setColumnWidth(0, 0)
+        hh.setSectionResizeMode(1, M3HeaderView.Interactive)
+        self._sd_events.setColumnWidth(1, 280)
+        hh.setSectionResizeMode(2, M3HeaderView.Interactive)
+        self._sd_events.setColumnWidth(2, 110)
+        hh.setSectionResizeMode(3, M3HeaderView.Interactive)
+        self._sd_events.setColumnWidth(3, 100)
+        hh.setSectionResizeMode(4, M3HeaderView.Interactive)
+        self._sd_events.setColumnWidth(4, 100)
         hh.setSectionResizeMode(5, M3HeaderView.Stretch)
-        hh.setSectionResizeMode(6, M3HeaderView.Interactive); self._sd_events.setColumnWidth(6, 180)
-        hh.setSectionResizeMode(7, M3HeaderView.Interactive); self._sd_events.setColumnWidth(7, 80)
+        hh.setSectionResizeMode(6, M3HeaderView.Interactive)
+        self._sd_events.setColumnWidth(6, 180)
+        hh.setSectionResizeMode(7, M3HeaderView.Interactive)
+        self._sd_events.setColumnWidth(7, 80)
 
         # Graphiques
         self._build_donut(evts)
@@ -329,7 +358,8 @@ class StudentDetail(QWidget):
         menu = M3Menu(self)
         edit_action = menu.addAction(_("context_menu.edit"))
         validate_action = menu.addAction(
-            _("context_menu.invalidate") if is_validated else _("context_menu.validate"))
+            _("context_menu.invalidate") if is_validated else _("context_menu.validate")
+        )
         delete_action = menu.addAction(_("context_menu.delete"))
         chosen = menu.exec(table.viewport().mapToGlobal(pos))
         if chosen == edit_action:
@@ -358,9 +388,12 @@ class StudentDetail(QWidget):
 
     def _delete_event(self, event_id: int):
         reply = QMessageBox.question(
-            self, _("student.confirm_delete_event"),
+            self,
+            _("student.confirm_delete_event"),
             _("common.dialog.delete_event").format(id=event_id),
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
         if reply != QMessageBox.Yes:
             return
         if self._actions.delete_event(event_id):
