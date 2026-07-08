@@ -128,6 +128,9 @@ class StudentDetail(QWidget):
         left.addWidget(evt_label)
         self._sd_events = M3TableWidget()
         self._sd_events.setAlternatingRowColors(True)
+        self._sd_events.setStyleSheet(
+            f"QTableWidget::item {{ padding: 1px 4px; font-size: {s(10)}px; }}"
+            f"QHeaderView::section {{ padding: 2px 4px; font-size: {s(10)}px; }}")
         self._sd_events.horizontalHeader().setStretchLastSection(True)
         self._sd_events.setEditTriggers(M3TableWidget.NoEditTriggers)
         self._sd_events.setSelectionBehavior(M3TableWidget.SelectRows)
