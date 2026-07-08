@@ -694,7 +694,10 @@ class DataLoader:
     def get_event_types_tree(self) -> dict[str, dict]:
         try:
             cur = self._cursor()
-            cur.execute("""
+            from LarcSuperviseur.common.session import session
+            lang = getattr(session, "fk_language", 2)
+            cur.execute(
+                """
                 SELECT idtypeevent, type_event,
                        COALESCE("Event_Niveau2", '') AS niv2,
                        COALESCE("Event_Niveau3", '') AS niv3
@@ -702,8 +705,11 @@ class DataLoader:
                 WHERE "Enabled" = TRUE
                   AND type_event IS NOT NULL
                   AND type_event != ''
+                  AND ("fk_language" = %s OR "fk_language" IS NULL)
                 ORDER BY idtypeevent
-            """)
+            """,
+                (lang,),
+            )
             tree = {}
             for _, cat, niv2, niv3 in cur.fetchall():
                 if cat not in tree:

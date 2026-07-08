@@ -89,13 +89,8 @@ class EventGenerator(QDialog):
                     self._absence_types.append(niveau2.strip())
                 elif "Retard" in type_evt or "Tardiness" in type_evt:
                     self._retard_durations.append(niveau2.strip())
-            if not self._absence_types:
-                self._absence_types = [_("event.absence_fallback")]
-            if not self._retard_durations:
-                self._retard_durations = self._RETARD_DURATIONS
         except Exception:
-            self._absence_types = [_("event.absence_fallback")]
-            self._retard_durations = self._RETARD_DURATIONS
+            pass
 
         # Keep existing type hierarchy for "Autres" mode
         self._type_hierarchy = self._loader.get_event_types_tree()
