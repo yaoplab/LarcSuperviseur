@@ -277,12 +277,18 @@ class TopBar(QFrame):
 
         old_theme = theme_manager.active_name
         old_card = session.card_theme
+        old_lang = session.fk_language
         dlg = PreferencesDialog(self)
         if dlg.exec():
             theme_changed = session.theme_pref != old_theme
-            card_changed = session.card_theme != old_card
-            if theme_changed:
-                self._on_theme_change(session.theme_pref)
+            lang_changed = session.fk_language != old_lang
+            if lang_changed:
+                from larccommon.l10n import Translator
+                lang = "en" if session.fk_language == 1 else "fr"
+                Translator.instance(lang).reload(Translator.l10n_dir())
+            if theme_changed or lang_changed:
+                if hasattr(self.parent(), "refresh_all"):
+                    self.parent().refresh_all()
             self.update_profile()
             if card_changed:
                 self._on_refresh()
