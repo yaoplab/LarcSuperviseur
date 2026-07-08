@@ -130,6 +130,8 @@ class StudentDetail(QWidget):
         self._sd_events.setAlternatingRowColors(True)
         self._sd_events.setStyleSheet(
             f"QTableWidget::item {{ padding: 1px 6px; }}")
+        self._sd_events.verticalHeader().setDefaultSectionSize(22)
+        self._sd_events.verticalHeader().setMinimumSectionSize(18)
         self._sd_events.horizontalHeader().setStretchLastSection(True)
         self._sd_events.setEditTriggers(M3TableWidget.NoEditTriggers)
         self._sd_events.setSelectionBehavior(M3TableWidget.SelectRows)
