@@ -114,10 +114,11 @@ class StudentDetail(QWidget):
             hdr.addWidget(f)
 
         self._sd_add_btn = QPushButton("+")
-        self._sd_add_btn.setFixedSize(34, 34)
+        self._sd_add_btn.setFixedSize(100, 100)
         self._sd_add_btn.setStyleSheet(
             f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
-            f"border: none; border-radius: 17px; font-size: {s(22)}px; font-weight: bold; }}"
+            f"border: none; border-radius: 12px; font-weight: bold; "
+            f"font-size: {s(28)}px; }}"
             f"QPushButton:hover {{ background: {p.active}; }}"
         )
         self._sd_add_btn.setCursor(Qt.PointingHandCursor)
