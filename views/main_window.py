@@ -231,7 +231,6 @@ class MainWindow(QWidget):
         self._absents_table.setMaximumHeight(200)
         absents_layout.addWidget(self._absents_table)
         self._absents_group.setVisible(False)
-        group_layout.addWidget(self._absents_group)
         self._history_group = M3Frame()
         self._history_group.setObjectName("panel")
         self._history_layout = QVBoxLayout(self._history_group)
@@ -274,7 +273,11 @@ class MainWindow(QWidget):
         self._history_layout.addLayout(filter_row)
         self._history_layout.addWidget(self._history_table)
         self._history_group.setMinimumHeight(320)
-        group_layout.addWidget(self._history_group, 1)
+        hist_row = QHBoxLayout()
+        hist_row.setAlignment(Qt.AlignTop)
+        hist_row.addWidget(self._history_group, 3)
+        hist_row.addWidget(self._absents_group, 1, Qt.AlignTop)
+        group_layout.addLayout(hist_row, 1)
 
         # -- Bottom row: charts (tabbed) + stats table --
         bottom_row = QHBoxLayout()
