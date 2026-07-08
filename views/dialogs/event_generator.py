@@ -45,7 +45,9 @@ class EventGenerator(QDialog):
         self._loader = DataLoader()
         self._path = []
         self._mode = None
+        self._modes = []
         self._absence_types = []
+        self._retard_durations = []
         self._phi = theme_manager.phi_theme
         self.setWindowTitle(_("event.window_title").format(id=student_id))
         self.setMinimumWidth(680)
