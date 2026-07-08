@@ -434,10 +434,12 @@ class MainWindow(QWidget):
         self._class_absents_table.setEditTriggers(M3TableWidget.NoEditTriggers)
         self._class_absents_table.setMaximumHeight(150)
         cal.addWidget(self._class_absents_table)
+        # Row cartes (3/4) + absents (1/4)
         self._class_absents_group.setVisible(False)
-        cards_frame_layout.addWidget(self._class_absents_group)
-
-        cards_frame_layout.addWidget(self._cards_scroll)
+        cards_absents_row = QHBoxLayout()
+        cards_absents_row.addWidget(self._cards_scroll, 3)
+        cards_absents_row.addWidget(self._class_absents_group, 1)
+        cards_frame_layout.addLayout(cards_absents_row)
         self._class_stack.addWidget(cards_frame)  # index 0
 
         # -- Page 1 : Détail élève --
