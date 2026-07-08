@@ -11,10 +11,12 @@ from phibuilder.widgets import (
     M3TabWidget,
 )
 from PySide6.QtCharts import (
+    QBarCategoryAxis,
+    QBarSeries,
+    QBarSet,
     QChart,
     QChartView,
-    QDateTimeAxis,
-    QLineSeries,
+    QPieSeries,
     QValueAxis,
 )
 from PySide6.QtCore import QDate, QDateTime, Qt, QTime, Signal
@@ -22,6 +24,7 @@ from PySide6.QtGui import QBrush, QColor, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QMessageBox,
+    QPushButton,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
@@ -38,8 +41,6 @@ from LarcSuperviseur.views.dialogs.event_generator import EventGenerator
 
 
 class StudentDetail(QWidget):
-    """Student detail with tabs, photo, and event management."""
-
     back_requested = Signal()
 
     def __init__(self, parent=None):
@@ -62,101 +63,51 @@ class StudentDetail(QWidget):
         sd_layout.setContentsMargins(6, 6, 6, 6)
         sd_layout.setSpacing(6)
 
-        # Header row
-        sd_header_row = QHBoxLayout()
-        self._back_btn = M3Button(_("common.button.back"))
+        # ── Header: back + nom/photo + add event ──
+        hdr = QHBoxLayout()
+        self._back_btn = QPushButton(f" {_('student.back')}")
         self._back_btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: {p.primary}; "
-            f"border: none; font-weight: bold; "
-            f"font-size: {s(11)}px; padding: 2px 6px; }}"
-            f"QPushButton:hover {{ color: {p.active}; }}"
-        )
+            f"QPushButton {{ background: transparent; color: {p.primary}; border: none; "
+            f"font-weight: bold; font-size: {s(11)}px; padding: 2px 6px; }}"
+            f"QPushButton:hover {{ color: {p.active}; }}")
         self._back_btn.setCursor(Qt.PointingHandCursor)
         self._back_btn.clicked.connect(self._on_back)
-        sd_header_row.addWidget(self._back_btn)
-        sd_header_row.addStretch()
-        sd_layout.addLayout(sd_header_row)
+        hdr.addWidget(self._back_btn)
 
-        self._sd_header = M3Label(f"<b>{_('student.title')}</b>")
-        self._sd_header.setObjectName("panel_title")
-        self._sd_class = M3Label()
-        self._sd_class.setStyleSheet(f"color: {p.text_soft}; font-size: {s(11)}px;")
-        sd_layout.addWidget(self._sd_header)
-        sd_layout.addWidget(self._sd_class)
-
-        # Tabs
-        self._sd_tabs = M3TabWidget()
-        self._sd_tabs.setDocumentMode(True)
-
-        # ---- Tab 1 : Coordonn\u00e9es ----
-        scroll1 = M3ScrollArea()
-        scroll1.setWidgetResizable(True)
-        scroll1.setFrameShape(M3Frame.NoFrame)
-        tab1 = QWidget()
-        t1_layout = QVBoxLayout(tab1)
-        t1_layout.setContentsMargins(4, 4, 4, 4)
-        t1_layout.setSpacing(6)
-
-        # Photo + infos + add event button
-        contact_row = QHBoxLayout()
         self._sd_photo = M3Label()
-        self._sd_photo.setFixedSize(150, 150)
+        self._sd_photo.setFixedSize(55, 55)
         self._sd_photo.setStyleSheet(f"background: {p.surface_variant}; border-radius: 8px;")
         self._sd_photo.setAlignment(Qt.AlignCenter)
-        contact_row.addWidget(self._sd_photo)
+        hdr.addWidget(self._sd_photo)
 
-        info_col = QVBoxLayout()
-        info_col.setSpacing(2)
-        self._sd_contact_labels = {}
-        for key, lbl in [
-            ("full_name", "Nom"),
-            ("email", "Email"),
-            ("email_perso", "Email personnel"),
-            ("tel_maison", "T\u00e9l\u00e9phone maison"),
-            ("tel_portable", "T\u00e9l\u00e9phone portable"),
-            ("date_entree", "Date d'entr\u00e9e"),
-        ]:
-            w = M3Label()
-            w.setStyleSheet(f"font-size: {s(12)}px; color: {p.text_soft};")
-            w.setWordWrap(True)
-            self._sd_contact_labels[key] = w
-            info_col.addWidget(w)
-        info_col.addStretch()
-        contact_row.addLayout(info_col, 1)
+        self._sd_header = M3Label()
+        self._sd_header.setStyleSheet(f"font-size: {s(16)}px; font-weight: bold; color: {p.text_strong};")
+        hdr.addWidget(self._sd_header)
+        hdr.addStretch()
 
-        self._sd_add_btn = M3Button("\U0001f349")
-        self._sd_add_btn.setFixedSize(100, 100)
+        self._sd_add_btn = QPushButton("+")
+        self._sd_add_btn.setFixedSize(34, 34)
         self._sd_add_btn.setStyleSheet(
             f"QPushButton {{ background: {p.primary}; color: {p.on_primary}; "
-            f"border: none; border-radius: 12px; font-weight: bold; "
-            f"font-size: {s(28)}px; }}"
-            f"QPushButton:hover {{ background: {p.active}; }}"
-        )
+            f"border: none; border-radius: 17px; font-size: {s(20)}px; font-weight: bold; }}"
+            f"QPushButton:hover {{ background: {p.active}; }}")
         self._sd_add_btn.setCursor(Qt.PointingHandCursor)
         self._sd_add_btn.setToolTip(_("student.add_event"))
         self._sd_add_btn.clicked.connect(self._on_add_event)
-        contact_row.addWidget(self._sd_add_btn)
+        hdr.addWidget(self._sd_add_btn)
+        sd_layout.addLayout(hdr)
 
-        t1_layout.addLayout(contact_row)
-
-        # KPIs
-        kpi_r = QHBoxLayout()
-        kpi_r.setSpacing(4)
+        # ── KPIs ──
+        kpi_row = QHBoxLayout()
+        kpi_row.setSpacing(6)
         self._sd_kpis = {}
-        for k, lbl in [
-            ("abs", _("chart.absences")),
-            ("exit", _("kpi.exit")),
-            ("total", _("kpi.total_events")),
-        ]:
+        for k, lbl in [("abs", _("chart.absences")), ("exit", _("kpi.exit")), ("total", _("kpi.total_events"))]:
             f = M3Frame()
             f.setObjectName("kpi_small")
-            f.setStyleSheet(
-                f"QFrame#kpi_small {{ background: {p.surface_variant}; "
-                f"border-radius: 6px; padding: 2px; }}"
-            )
+            f.setStyleSheet(f"QFrame {{ background: {p.surface_variant}; border-radius: 6px; padding: 4px 12px; }}")
             fl = QVBoxLayout(f)
             fl.setContentsMargins(4, 2, 4, 2)
-            v = M3Label("\u2014")
+            v = M3Label("—")
             v.setStyleSheet(f"font-size: {s(18)}px; font-weight: bold; color: {p.primary};")
             v.setAlignment(Qt.AlignCenter)
             l = M3Label(lbl)
@@ -165,68 +116,69 @@ class StudentDetail(QWidget):
             fl.addWidget(v)
             fl.addWidget(l)
             self._sd_kpis[k] = v
-            kpi_r.addWidget(f)
-        t1_layout.addLayout(kpi_r)
+            kpi_row.addWidget(f)
+        kpi_row.addStretch()
+        sd_layout.addLayout(kpi_row)
 
-        # Events
+        # ── Contenu : événements (8) + graphiques (5) ──
+        content = QHBoxLayout()
+        content.setSpacing(6)
+
+        # Colonne gauche : événements
+        left = QVBoxLayout()
         evt_label = M3Label(f"<b>{_('student.tab.events')}</b>")
-        evt_label.setStyleSheet(f"font-size: {s(11)}px;")
+        evt_label.setStyleSheet(f"font-size: {s(12)}px;")
+        left.addWidget(evt_label)
         self._sd_events = M3TableWidget()
         self._sd_events.setAlternatingRowColors(True)
         self._sd_events.horizontalHeader().setStretchLastSection(True)
         self._sd_events.setEditTriggers(M3TableWidget.NoEditTriggers)
         self._sd_events.setSelectionBehavior(M3TableWidget.SelectRows)
         self._sd_events.setContextMenuPolicy(Qt.CustomContextMenu)
-        self._sd_events.customContextMenuRequested.connect(
-            lambda pos: self._show_context_menu(self._sd_events, pos)
-        )
+        self._sd_events.customContextMenuRequested.connect(lambda pos: self._show_context_menu(self._sd_events, pos))
         self._sd_events.cellDoubleClicked.connect(self._on_event_table_dblclick)
-        t1_layout.addWidget(evt_label)
-        t1_layout.addWidget(self._sd_events, 1)
+        self._sd_events.setSortingEnabled(True)
+        left.addWidget(self._sd_events, 1)
+        content.addLayout(left, 8)
 
-        # Bottom row: chart tabs
+        # Colonne droite : graphiques dans des onglets
         self._sd_chart_tabs = M3TabWidget()
-        self._sd_chart_tabs.setMinimumHeight(200)
+        self._sd_chart_tabs.setDocumentMode(True)
 
-        tab_chart = QWidget()
-        tab_chart_layout = QVBoxLayout(tab_chart)
-        tab_chart_layout.setContentsMargins(0, 0, 0, 0)
-        self._sd_chart_view = QChartView()
-        self._sd_chart_view.setRenderHint(QPainter.Antialiasing)
-        self._sd_chart = QChart()
-        self._sd_chart_view.setChart(self._sd_chart)
-        tab_chart_layout.addWidget(self._sd_chart_view)
-        self._sd_chart_tabs.addTab(tab_chart, _("chart.evolution_absences"))
+        # Onglet 1 : Donut répartition par type
+        donut_w = QWidget()
+        donut_layout = QVBoxLayout(donut_w)
+        donut_layout.setContentsMargins(0, 0, 0, 0)
+        self._donut_chart = QChart()
+        self._donut_chart.setAnimationOptions(QChart.SeriesAnimations)
+        self._donut_chart.legend().setVisible(True)
+        self._donut_chart.legend().setAlignment(Qt.AlignBottom)
+        self._donut_view = QChartView(self._donut_chart)
+        self._donut_view.setRenderHint(QPainter.Antialiasing)
+        donut_layout.addWidget(self._donut_view)
+        self._sd_chart_tabs.addTab(donut_w, _("chart.by_type"))
 
-        t1_layout.addWidget(self._sd_chart_tabs)
+        # Onglet 2 : Barres par jour
+        bars_w = QWidget()
+        bars_layout = QVBoxLayout(bars_w)
+        bars_layout.setContentsMargins(0, 0, 0, 0)
+        self._bars_chart = QChart()
+        self._bars_chart.setAnimationOptions(QChart.SeriesAnimations)
+        self._bars_chart.legend().setVisible(False)
+        self._bars_view = QChartView(self._bars_chart)
+        self._bars_view.setRenderHint(QPainter.Antialiasing)
+        bars_layout.addWidget(self._bars_view)
+        self._sd_chart_tabs.addTab(bars_w, _("chart.by_day"))
 
-        scroll1.setWidget(tab1)
+        content.addWidget(self._sd_chart_tabs, 5)
+        sd_layout.addLayout(content, 1)
 
-        # ---- Tab 2 : Parents ----
-        scroll2 = M3ScrollArea()
-        scroll2.setWidgetResizable(True)
-        scroll2.setFrameShape(M3Frame.NoFrame)
-        tab2 = QWidget()
-        t2_layout = QVBoxLayout(tab2)
-        t2_layout.setAlignment(Qt.AlignCenter)
-        placeholder2 = M3Label(_("student.parents_placeholder"))
-        placeholder2.setAlignment(Qt.AlignCenter)
-        placeholder2.setStyleSheet(f"color: {p.text_disabled}; font-size: {s(13)}px;")
-        t2_layout.addWidget(placeholder2)
-        scroll2.setWidget(tab2)
-
-        self._sd_tabs.addTab(scroll1, _("student.tab.coords"))
-        self._sd_tabs.addTab(scroll2, _("student.tab.parents"))
-
-        sd_layout.addWidget(self._sd_tabs, 1)
-
-        # Placeholder quand aucun \u00e9l\u00e8ve s\u00e9lectionn\u00e9
+        # Placeholder
         self._sd_placeholder = M3Label(_("student.no_selection"))
         self._sd_placeholder.setAlignment(Qt.AlignCenter)
         self._sd_placeholder.setStyleSheet(f"color: {p.text_disabled}; font-size: {s(14)}px;")
+        self._sd_placeholder.setVisible(False)
         sd_layout.addWidget(self._sd_placeholder)
-
-        self._sd_tabs.hide()
 
     def load(self, student_id: int):
         self._student_id = student_id
@@ -238,92 +190,25 @@ class StudentDetail(QWidget):
             return
 
         name = f"{info['first_name']} {info['last_name']}"
-        self._sd_header.setText(f"<b>{name}</b>")
-        self._sd_class.setText(info["class_label"])
-
-        self._sd_contact_labels["full_name"].setText(
-            f"<b>{_('student.contact.name')} :</b> {info['last_name'].upper()} {info['first_name']}"
-        )
-        self._sd_contact_labels["email"].setText(
-            f"<b>{_('student.contact.email')} :</b> {info.get('email') or '\u2014'}"
-        )
-        self._sd_contact_labels["email_perso"].setText(
-            f"<b>{_('student.contact.email_perso')} :</b> {info.get('email_perso') or '\u2014'}"
-        )
-        self._sd_contact_labels["tel_maison"].setText(
-            f"<b>{_('student.contact.tel_maison')} :</b> {info.get('tel_maison') or '\u2014'}"
-        )
-        self._sd_contact_labels["tel_portable"].setText(
-            f"<b>{_('student.contact.tel_portable')} :</b> {info.get('tel_portable') or '\u2014'}"
-        )
-        self._sd_contact_labels["date_entree"].setText(
-            f"<b>{_('student.contact.date_entree')} :</b> {info.get('date_entree').strftime('%d/%m/%Y') if info.get('date_entree') else '\u2014'}"
-        )
+        self._sd_header.setText(f"<b>{name}</b>  {info['class_label']}")
 
         pix = QPixmap(get_photo_path(student_id))
         if not pix.isNull():
-            self._sd_photo.setPixmap(
-                pix.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            )
-        if not self._sd_photo.pixmap() or self._sd_photo.pixmap().isNull():
-            self._sd_photo.setText("\U0001f4f7")
+            self._sd_photo.setPixmap(pix.scaled(55, 55, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
         kpi = self._loader.get_student_kpis(student_id, date_from, date_to)
         self._sd_kpis["abs"].setText(str(kpi.get("abs_count", 0)))
         self._sd_kpis["exit"].setText(str(kpi.get("exit_count", 0)))
         self._sd_kpis["total"].setText(str(kpi.get("total", 0)))
 
-        self._sd_chart.removeAllSeries()
-        for ax in self._sd_chart.axes():
-            self._sd_chart.removeAxis(ax)
-
-        from datetime import datetime, timedelta
-
-        term_start = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
-        term_end = datetime.now().strftime("%Y-%m-%d")
-
-        trend = self._loader.get_student_absence_trend(student_id, term_start, term_end)
-        if trend:
-            line = QLineSeries()
-            line.setColor(QColor(p.error))
-            for row in trend:
-                d = row["date"]
-                cnt = row["count"]
-                qd = QDate(d.year, d.month, d.day)
-                dt = QDateTime(qd, QTime(0, 0))
-                line.append(dt.toMSecsSinceEpoch(), cnt)
-            self._sd_chart.addSeries(line)
-            self._sd_chart.setTitle(_("chart.abs_trend_term"))
-            self._sd_chart.setAnimationOptions(QChart.SeriesAnimations)
-            self._sd_chart.legend().setVisible(False)
-            ax_x = QDateTimeAxis()
-            ax_x.setFormat("dd/MM")
-            ax_x.setLabelsAngle(-45)
-            self._sd_chart.addAxis(ax_x, Qt.AlignBottom)
-            line.attachAxis(ax_x)
-            ax_y = QValueAxis()
-            max_t = max(row["count"] for row in trend)
-            ax_y.setRange(0, max_t + 2)
-            self._sd_chart.addAxis(ax_y, Qt.AlignLeft)
-            line.attachAxis(ax_y)
-        else:
-            self._sd_chart.setTitle(_("chart.abs_trend_nodata"))
-
+        # Événements
         evts = self._loader.get_student_events(student_id)
         self._sd_events.setRowCount(len(evts))
         self._sd_events.setColumnCount(8)
-        self._sd_events.setHorizontalHeaderLabels(
-            [
-                _("table.id"),
-                _("table.type"),
-                _("table.location"),
-                _("table.subject"),
-                _("table.date"),
-                _("table.note"),
-                _("table.created_by"),
-                _("table.validated"),
-            ]
-        )
+        self._sd_events.setHorizontalHeaderLabels([
+            _("table.id"), _("table.type"), _("table.location"), _("table.subject"),
+            _("table.date"), _("table.note"), _("table.created_by"), _("table.validated"),
+        ])
         self._sd_events.setColumnHidden(0, True)
         for i, evt in enumerate(evts):
             ei = event_icon(evt["event_type"])
@@ -333,9 +218,7 @@ class StudentDetail(QWidget):
                 QTableWidgetItem(f"{ei} {evt['event_type']}"),
                 QTableWidgetItem(evt.get("lieu_label") or ""),
                 QTableWidgetItem(evt.get("subject_label") or ""),
-                QTableWidgetItem(
-                    evt["event_at"].strftime("%d/%m %H:%M") if evt.get("event_at") else ""
-                ),
+                QTableWidgetItem(evt["event_at"].strftime("%d/%m %H:%M") if evt.get("event_at") else ""),
                 QTableWidgetItem(evt.get("note") or ""),
                 QTableWidgetItem(evt.get("creator")),
                 QTableWidgetItem("\u2713" if evt.get("validated_by") else ""),
@@ -347,24 +230,69 @@ class StudentDetail(QWidget):
                 it.setFlags(it.flags() & ~Qt.ItemIsEditable)
                 self._sd_events.setItem(i, j, it)
         hh = self._sd_events.horizontalHeader()
-        hh.setSectionResizeMode(0, M3HeaderView.Fixed)
-        self._sd_events.setColumnWidth(0, 0)
-        hh.setSectionResizeMode(1, M3HeaderView.Interactive)
-        self._sd_events.setColumnWidth(1, 300)
-        hh.setSectionResizeMode(2, M3HeaderView.Interactive)
-        self._sd_events.setColumnWidth(2, 120)
-        hh.setSectionResizeMode(3, M3HeaderView.Interactive)
-        self._sd_events.setColumnWidth(3, 110)
-        hh.setSectionResizeMode(4, M3HeaderView.Interactive)
-        self._sd_events.setColumnWidth(4, 100)
+        hh.setSectionResizeMode(0, M3HeaderView.Fixed); self._sd_events.setColumnWidth(0, 0)
+        hh.setSectionResizeMode(1, M3HeaderView.Interactive); self._sd_events.setColumnWidth(1, 280)
+        hh.setSectionResizeMode(2, M3HeaderView.Interactive); self._sd_events.setColumnWidth(2, 110)
+        hh.setSectionResizeMode(3, M3HeaderView.Interactive); self._sd_events.setColumnWidth(3, 100)
+        hh.setSectionResizeMode(4, M3HeaderView.Interactive); self._sd_events.setColumnWidth(4, 100)
         hh.setSectionResizeMode(5, M3HeaderView.Stretch)
-        hh.setSectionResizeMode(6, M3HeaderView.Interactive)
-        self._sd_events.setColumnWidth(6, 200)
-        hh.setSectionResizeMode(7, M3HeaderView.Interactive)
-        self._sd_events.setColumnWidth(7, 200)
+        hh.setSectionResizeMode(6, M3HeaderView.Interactive); self._sd_events.setColumnWidth(6, 180)
+        hh.setSectionResizeMode(7, M3HeaderView.Interactive); self._sd_events.setColumnWidth(7, 80)
 
-        self._sd_tabs.show()
+        # Graphiques
+        self._build_donut(evts)
+        self._build_bars(evts)
+
+        self._sd_chart_tabs.show()
         self._sd_placeholder.hide()
+
+    def _build_donut(self, evts: list[dict]):
+        self._donut_chart.removeAllSeries()
+        if not evts:
+            self._donut_chart.setTitle(_("chart.no_data"))
+            return
+        self._donut_chart.setTitle("")
+        counts = {}
+        for e in evts:
+            t = e["event_type"]
+            cat = t.split(">")[0].strip()
+            counts[cat] = counts.get(cat, 0) + 1
+        series = QPieSeries()
+        colors = ["#d32f2f", "#1976d2", "#e65100", "#f9a825", "#455A64"]
+        for i, (cat, cnt) in enumerate(counts.items()):
+            sl = series.append(f"{cat} ({cnt})", cnt)
+            sl.setColor(QColor(colors[i % len(colors)]))
+        series.setHoleSize(0.4)
+        self._donut_chart.addSeries(series)
+
+    def _build_bars(self, evts: list[dict]):
+        self._bars_chart.removeAllSeries()
+        for ax in self._bars_chart.axes():
+            self._bars_chart.removeAxis(ax)
+        if not evts:
+            self._bars_chart.setTitle(_("chart.no_data"))
+            return
+        self._bars_chart.setTitle("")
+        by_day = {}
+        for e in evts:
+            d = e["event_at"].strftime("%d/%m") if e.get("event_at") else "?"
+            by_day[d] = by_day.get(d, 0) + 1
+        days = sorted(by_day.keys())[-14:]
+        bar_set = QBarSet("Événements")
+        bar_set.setColor(QColor(theme_manager.palette.primary))
+        for d in days:
+            bar_set.append(by_day[d])
+        series = QBarSeries()
+        series.append(bar_set)
+        self._bars_chart.addSeries(series)
+        ax_x = QBarCategoryAxis()
+        ax_x.append(days)
+        self._bars_chart.addAxis(ax_x, Qt.AlignBottom)
+        series.attachAxis(ax_x)
+        ax_y = QValueAxis()
+        ax_y.setRange(0, max(by_day.values()) + 2)
+        self._bars_chart.addAxis(ax_y, Qt.AlignLeft)
+        series.attachAxis(ax_y)
 
     def _on_add_event(self):
         sid = self._student_id
@@ -380,8 +308,8 @@ class StudentDetail(QWidget):
             self.load(sid)
 
     def _on_back(self):
-        self._sd_tabs.hide()
-        self._sd_placeholder.show()
+        self._sd_placeholder.setVisible(True)
+        self._sd_chart_tabs.hide()
         self.back_requested.emit()
 
     def _get_event_id_from_table(self, table: M3TableWidget) -> int | None:
@@ -400,8 +328,7 @@ class StudentDetail(QWidget):
         menu = M3Menu(self)
         edit_action = menu.addAction(_("context_menu.edit"))
         validate_action = menu.addAction(
-            _("context_menu.invalidate") if is_validated else _("context_menu.validate")
-        )
+            _("context_menu.invalidate") if is_validated else _("context_menu.validate"))
         delete_action = menu.addAction(_("context_menu.delete"))
         chosen = menu.exec(table.viewport().mapToGlobal(pos))
         if chosen == edit_action:
@@ -430,12 +357,9 @@ class StudentDetail(QWidget):
 
     def _delete_event(self, event_id: int):
         reply = QMessageBox.question(
-            self,
-            _("student.confirm_delete_event"),
+            self, _("student.confirm_delete_event"),
             _("common.dialog.delete_event").format(id=event_id),
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply != QMessageBox.Yes:
             return
         if self._actions.delete_event(event_id):
