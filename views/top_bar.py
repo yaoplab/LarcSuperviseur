@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
     QHBoxLayout,
+    QMessageBox,
     QVBoxLayout,
 )
 
@@ -286,9 +287,9 @@ class TopBar(QFrame):
                 from larccommon.l10n import Translator
                 lang = "en" if session.fk_language == 1 else "fr"
                 Translator.instance(lang).reload(Translator.l10n_dir())
-            if theme_changed or lang_changed:
-                if hasattr(self.parent(), "refresh_all"):
-                    self.parent().refresh_all()
+                QMessageBox.information(
+                    self, _("topbar.preferences"),
+                    _("topbar.restart_needed"))
             self.update_profile()
             if card_changed:
                 self._on_refresh()
