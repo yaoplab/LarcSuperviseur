@@ -1,4 +1,4 @@
-# AGENTS.md — Projets Larc (Mise à jour 07/07/2026)
+﻿# AGENTS.md — Projets Larc (Mise à jour 07/07/2026)
 
 ## What this is
 
@@ -208,3 +208,29 @@ python -m LarcHub                  # Hub
 python -m LarcDesign               # Designer (i18n, thèmes, rôles, logs, types, lieux)
 python -m LarcSuperviseur.tools.show_icons  # Aperçu icônes MD3
 ```
+
+
+## Mise a jour 08/07/2026
+
+✅ **Termine** :
+- **Themes unifies** : 1 seul ThemeManager dans larccommon/theme.py (4 themes)
+- **QssHelper** : 14 generateurs QSS partages
+- **Login harmonise** : golden ratio, force toggle, tabs auto
+- **StudentEditDialog** : sidebar verticale + QStackedWidget + Fibonacci
+- **DossierPanel** : sections M3 + table triee + fichiers par entree + apercu
+- **StudentDetail** : composant reutilisable, KPIs + events/charts cote a cote
+- **CI** : ruff + black + pre-commit + GitHub Actions (6 repos)
+- **Composants** : FileViewer, FilePanel, FileResolver, TableSettings, M3SidebarNav, M3ChipBar
+- **Tests** : 19 tests (FileResolver, TableSettings, FileViewer, FilePanel)
+- **i18n** : 551/551 cles completes
+- **Preferences** : larcauth_config DB
+- **EventGenerator** : types depuis larcauth_type_status (DB, filtre langue)
+- **Login partage** : larccommon/login.py (a brancher)
+
+🚧 **A faire** :
+- Brancher larccommon/login.py dans les 3 apps
+- Brancher M3SidebarNav dans StudentEditDialog
+
+⚠ **Problemes connus** :
+- ruff supprime des imports (restaures manuellement)
+- config.ini dans .gitignore
