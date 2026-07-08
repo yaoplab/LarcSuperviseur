@@ -75,8 +75,8 @@ class EventGenerator(QDialog):
         try:
             cur = conn.cursor()
             cur.execute(
-                "SELECT DISTINCT type_event FROM larcauth_type_status "
-                "WHERE fk_language = %s AND Enabled = TRUE ORDER BY idtypeevent",
+                'SELECT DISTINCT type_event FROM larcauth_type_status '
+                'WHERE fk_language = %s AND "Enabled" = TRUE ORDER BY idtypeevent',
                 (lang,),
             )
             mode_map = {"Absence": "absence", "Retard": "retard"}
@@ -89,9 +89,9 @@ class EventGenerator(QDialog):
                 self._modes.append((cat, key))
 
             cur.execute(
-                "SELECT type_event, Ststus_Niveau2 FROM larcauth_type_status "
-                "WHERE fk_language = %s AND Enabled = TRUE AND Ststus_Niveau2 IS NOT NULL "
-                "ORDER BY idtypeevent",
+                'SELECT type_event, Ststus_Niveau2 FROM larcauth_type_status '
+                'WHERE fk_language = %s AND "Enabled" = TRUE AND Ststus_Niveau2 IS NOT NULL '
+                'ORDER BY idtypeevent',
                 (lang,),
             )
             self._absence_types = []
