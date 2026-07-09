@@ -1,4 +1,4 @@
-﻿# AGENTS.md — Projets Larc (Mise à jour 07/07/2026)
+﻿# AGENTS.md — Projets Larc (Mise à jour 09/07/2026)
 
 ## What this is
 
@@ -210,6 +210,144 @@ python -m LarcSuperviseur.tools.show_icons  # Aperçu icônes MD3
 ```
 
 
+## eLarcProfPy — Architecture (09/07/2026)
+
+App desktop pour professeurs : notes, évaluations, synchronisation device↔serveur.
+SQLite locale (`elarc.db`) + psycopg2 PostgreSQL (Intranet/Cloud).
+PySide6 widgets directs + QSS via `_STYLE` + Fibonacci via `phi_theme.spacing`.
+**Nom affiché** : LarcProf.
+
+| Fichier | Rôle | Lignes |
+|---|---|---|
+| `main.py` | Point d'entrée + modes CLI (`--mode4`, `--test-create-db`) | 137 |
+| `views/login.py` | Login 4 onglets (Intranet/Cloud/PIN/Nouvelle instance) + i18n | ~1180 |
+| `views/home_window.py` | Dashboard intermédiaire : profil, synchro, boutons PEI/DP | ~650 |
+| `views/main_window.py` | Espace de travail : top bar + grille élèves × notes | ~1438 |
+| `views/eval_manager.py` | Gestionnaire d'évaluations (non-modal) | 431 |
+| `views/password.py` | ChangePinDialog + ChangePasswordDialog | — |
+| `common/theme.py` | ThemeManager local + `phi_theme` (Theme phibuilder unifié) | ~370 |
+| `common/database.py` | Database (PostgreSQL Intranet/Cloud + SQLite) | 203 |
+| `common/session.py` | UserRole, ConnMode, AuthResult, Session | 82 |
+| `common/sync.py` | SyncManager (shadow-table _ref, diff cellule, pull/push) | 489 |
+| `common/sqlite_init.py` | SQLiteInit (DDL, seed, take_teacher_data, migrations) | 793 |
+| `common/auth.py` | AuthManager (Intranet) + OAuth2Manager (Google PKCE) | — |
+| `common/network.py` | detect_network() shim → larccommon | — |
+| `common/logger.py` | log() shim → larccommon | — |
+| `common/grid_config.py` | GridConfig loader (couleurs notes, largeurs colonnes) | — |
+
+### HomeWindow — Dashboard
+
+Écran intermédiaire entre login et espace de travail. Divisé en 2 colonnes :
+
+**Gauche** :
+- Carte Profil : nom, email, rôle, année, trimestre, nb classes-matières, nb élèves
+- Indicateurs connexion : `Intranet : ●/○`, `Cloud : ●/○`, `Hors connexion`
+- Carte Synchro : date dernière sync, source, compteur modifs non synchronisées (détail par table), bouton **Synchroniser**
+
+**Droite** — boutons conditionnels selon le profil du prof :
+- **Section PEI** (visible si prof enseigne PEI/MYP) :
+  - Unité de groupes de matières → `college_notes_0` (ex-MainWindow)
+  - Unités interdisciplinaires → `college_notes_opt1`
+  - Projet Personnel → `college_notes_opt2`
+  - **Mes classes PEI** → `colleges_eleves` (visible seulement si serveur connecté — Intranet ou Cloud)
+- **Section DP** (visible si prof enseigne DP/DPFr/DPEn) :
+  - Unité de groupes de matières → `lycee_notes_0`
+  - TDC → `lycee_notes_opt2`
+  - CAS → `lycee_notes_opt3`
+  - Mémoire → `lycee_notes_opt1`
+  - **Mes classes DP** → `lycee_eleves` (visible seulement si serveur connecté)
+- **Professeur principal** (notes/commentaires, utilise SQLite) :
+  - PEI → `college_bulletin`
+  - DP → `lycee_bulletin`
+- **Déconnexion**
+
+`_detect_programs()` interroge les CTS → classroom → level → program pour savoir PEI/DP.
+
+#### Visibilité individuelle des boutons (`_detect_button_visibility`)
+
+| Bouton | Table | Condition |
+|---|---|---|
+| `pei_grp_matieres` | `larcauth_classroom_termsubject` | prof, trim, enabled=1, `fk_program_id IN (12,22)` |
+| `pei_interdisc` | `larcauth_classroom_termothersubject` | prof, trim, enabled=1, `fk_program_id IN (12,22)`, `unit_multisubjects=1` |
+| `pei_pp` | `larcauth_classroom_termothersubject` | prof, trim, enabled=1, `fk_program_id IN (12,22)`, label LIKE `Personal%`/`Projet%` |
+| `pei_mes_classes` | = pei_grp_matieres **+ serveur connecté** | |
+| `dp_grp_matieres` | `larcauth_classroom_termsubject` | prof, trim, enabled=1, `fk_program_id IN (13,23)` |
+| `dp_tdc` | `larcauth_classroom_termothersubject` | prof, trim, enabled=1, label LIKE `Th%` |
+| `dp_cas` | `larcauth_classroom_termothersubject` | prof, trim, enabled=1, label LIKE `Cr%` |
+| `dp_memoire` | `larcauth_classroom_termothersubject` | prof, trim, enabled=1, label LIKE `Mé%`/`Ext%` |
+| `dp_mes_classes` | = dp_grp_matieres **+ serveur connecté** | |
+| Professeur principal | `larcauth_classroom` | `fk_headteacher_id = prof` |
+
+### Mapping boutons → vues cibles
+
+```python
+_BTN_VIEW = {
+    'pei_grp_matieres': 'college_notes_0',
+    'pei_interdisc':     'college_notes_opt1',
+    'pei_pp':            'college_notes_opt2',
+    'pei_mes_classes':   'colleges_eleves',
+    'dp_grp_matieres':   'lycee_notes_0',
+    'dp_memoire':        'lycee_notes_opt1',
+    'dp_tdc':            'lycee_notes_opt2',
+    'dp_cas':            'lycee_notes_opt3',
+    'dp_mes_classes':    'lycee_eleves',
+    'pei_prof_principal':'college_bulletin',
+    'dp_prof_principal': 'lycee_bulletin',
+}
+```
+
+- `colleges_eleves` / `lycee_eleves` : connexion serveur directe (PostgreSQL), pas SQLite. Fonctionnement simplifié LarcSuperviseur, limité aux classes du prof.
+- `main_window.py` → renommé `college_notes_0` (titre fenêtre : « LarcProf — College Notes »).
+
+### Login — 4 onglets + i18n
+
+- Onglets : Intranet, Cloud, Hors connexion (PIN), Nouvelle instance
+- Style : `_STYLE` property + QSS classes (`.btn-primary`, `.btn-google`, `.btn-pin`, `.btn-create`, `.panel`, `.section-title`, etc.)
+- Espacement : `self._sp(SpacingToken.XXL)` Fibonacci via `theme_manager.phi_theme.spacing`
+- i18n : `Translator.instance(lang).load_dir(...)` dans `__init__`, clés `prof_login.*` dans LarcCommon
+- Taille fenêtre : 480×780 (ratio 1.625 ≈ φ)
+
+### phi_theme dans eLarcProfPy
+
+`common/theme.py` ThemeManager expose `phi_theme` (property) :
+- Construit un `PhiTheme(ThemeConfig(...))` avec `PhiScale(base_spacing=4)`
+- `_M3Colors` mappe la palette eLarcProfPy → propriétés M3 (primary, surface, error, outline, etc.)
+- Reset automatique au `set_active()`
+- Utilisé pour `spacing.spacing(SpacingToken.XXL)` dans login et home_window
+
+### i18n eLarcProfPy
+
+- Initialisation : `Translator.instance(lang).load_dir(Translator.l10n_dir())` dans `LoginWindow.__init__`
+- Clés centralisées dans `LarcCommon/larccommon/l10n/fr.json` et `en.json`
+- Préfixe `prof_login.*` pour les clés spécifiques (18 clés) :
+  `title`, `subtitle`, `tab_pin`, `tab_new`, `pin_title`, `pin_placeholder`, `pin_note`,
+  `connect_pin`, `change_pin`, `change_password`, `new_title`, `new_info`, `new_dest`,
+  `create_instance`, `info_cloud`, `status.internet`, `status.offline`
+- Réutilisation des clés `login.*` existantes : `tab_intranet`, `tab_cloud`, `email_placeholder`,
+  `password_placeholder`, `connect_intranet`, `connect_google`, `error.required`, `error.auth_failed`,
+  `status.intranet`, `status.cloud`
+- Attention : ne pas utiliser `_` comme variable throwaway (écrase la fonction i18n)
+  → utiliser `_outer`, `_ignored` à la place
+
+## Mise à jour 09/07/2026
+
+✅ **Terminé eLarcProfPy** :
+- **HomeWindow** : dashboard intermédiaire login→notes avec profil, synchro, boutons PEI/DP conditionnels
+- **Login reconstruit** : QSS classes + Fibonacci + i18n 4 onglets
+- **phi_theme** ajouté au ThemeManager local (spacing Fibonacci + couleurs M3)
+- **Boutons Mes classes PEI/DP** : visibles seulement si serveur connecté (Intranet/Cloud), invisibles en Offline
+- **Bouton Professeur principal** : accès notes/commentaires via SQLite
+- **Indicateurs connexion** dans la carte Profil (Intranet/Cloud ●/○)
+- **i18n** : 18 clés `prof_login.*` ajoutées dans LarcCommon fr.json/en.json
+- **Renommage** : "LarcProf" (ex-eLarcProf) dans tous les titres de fenêtres
+
+🚧 **À faire** :
+- Brancher larccommon/login.py dans les 3 apps (LarcSuperviseur, LarcSecretaire, LarcHub)
+- Brancher M3SidebarNav dans StudentEditDialog
+- Algorithme de visibilité individuelle des boutons PEI/DP (`_detect_button_visibility`)
+- Vue "Mes classes PEI/DP" (fonctionnement simplifié LarcSuperviseur, connexion serveur directe)
+- Vue "Professeur principal" (notes et commentaires, SQLite)
+
 ## Mise a jour 08/07/2026
 
 ✅ **Termine** :
@@ -234,3 +372,44 @@ python -m LarcSuperviseur.tools.show_icons  # Aperçu icônes MD3
 ⚠ **Problemes connus** :
 - ruff supprime des imports (restaures manuellement)
 - config.ini dans .gitignore
+
+
+
+✅ **Termine** :
+- **Themes unifies** : 1 seul ThemeManager dans larccommon/theme.py (4 themes)
+- **QssHelper** : 14 generateurs QSS partages
+- **Login harmonise** : golden ratio, force toggle, tabs auto
+- **StudentEditDialog** : sidebar verticale + QStackedWidget + Fibonacci
+- **DossierPanel** : sections M3 + table triee + fichiers par entree + apercu
+- **StudentDetail** : composant reutilisable, KPIs + events/charts cote a cote
+- **CI** : ruff + black + pre-commit + GitHub Actions (6 repos)
+- **Composants** : FileViewer, FilePanel, FileResolver, TableSettings, M3SidebarNav, M3ChipBar
+- **Tests** : 19 tests (FileResolver, TableSettings, FileViewer, FilePanel)
+- **i18n** : 551/551 cles completes
+- **Preferences** : larcauth_config DB
+- **EventGenerator** : types depuis larcauth_type_status (DB, filtre langue)
+- **Login partage** : larccommon/login.py (a brancher)
+
+🚧 **A faire** :
+- Brancher larccommon/login.py dans les 3 apps
+- Brancher M3SidebarNav dans StudentEditDialog
+
+⚠ **Problemes connus** :
+- ruff supprime des imports (restaures manuellement)
+- config.ini dans .gitignore
+
+## Mise a jour 08/07/2026 (soir)
+
+✅ **LarcSecretaire harmonise avec LarcSuperviseur** :
+- **Design unifie** : QWidgets + QSS (QPushButton/QLabel/QFrame) au lieu de M3 widgets
+- **Login partage** : larccommon/login.py utilise par LarcSecretaire (callbacks on_intranet_login, on_cloud_login, on_success)
+- **Sidebar** : boutons #section_btn + #class_btn via QssHelper, identique a LarcSuperviseur
+- **Top bar** : icone theme M3 dynamique, plus d'emojis
+- **Dashboard** : QFrame + QLabel + QTableWidget comme LarcSuperviseur
+- **Couleurs** : suppression de 	heme_manager.bind(app) → plus de violet M3
+- **Preferences** : 	heme_pref charge depuis DB au demarrage
+- **i18n** : Translator initialise dans main.py, toggle FR/EN dans menu profil
+
+🚧 **Login partage** : larccommon/login.py avec callbacks on_intranet_login, on_cloud_login, 	itle_prefix, subtitle. LarcSuperviseur pas encore branche.
+
+⚠ **LarcSecretaire** : dossier_panel.py encore en M3 widgets (non converti).
