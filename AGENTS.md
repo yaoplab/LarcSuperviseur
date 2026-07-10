@@ -122,11 +122,21 @@ ds.sp(SpacingToken.XXL)   # 84 px
 | Catégorie | Token | Valeur |
 |---|---|---|
 | Espacement | `ds.space_xs` / `ds.space_sm` / `ds.space_md` / `ds.space_xl` | 8 / 12 / 20 / 52 px |
-| Champs | `ds.field_height` | 52 px |
+| Champs | `ds.field_height` | 32 px |
 | Boutons | `ds.button_height` / `ds.icon_lg` | 52 px |
 | Bordures | `ds.radius_xs` / `ds.radius_sm` / `ds.border_width` | 4 / 8 / 1 px |
 | Polices | `ds.font_title` / `ds.font_body` / `ds.font_small` | 14 / 13 / 11 px |
 | Tableaux | `ds.table_row_min` / `ds.table_qss()` | 32 px |
+
+### Contrainte stricte padding champs
+- Tout champ de saisie DOIT avoir un `padding` gauche ≥ `ds.space_md` (20px) — le premier caractère ne touche jamais la bordure
+- Le `_flat_field` standard complet :
+  ```python
+  f"background: transparent; border: 1px solid {p.outline}; "
+  f"border-radius: {ds.radius_xs}px; padding: {ds.space_md}px; "
+  f"color: {p.text_strong}; font-size: {ds.font_body}px;"
+  ```
+- **INTERDIT** d'oublier `padding` ou `color` dans un override QSS de champ
 
 ### Pattern standard pour un formulaire
 
@@ -150,6 +160,42 @@ table = M3TableWidget(theme=phi)
 table.setStyleSheet(ds.table_qss())
 table.horizontalHeader().setFixedHeight(ds.space_lg)
 ```
+
+## Audit padding/margin (10/07/2026)
+
+### Règle absolue
+- **TOUTE** valeur de padding/margin/spacing dans QSS doit utiliser les tokens `ds.*` (`ds.space_xxs`=4, `ds.space_xs`=8, `ds.space_sm`=12, `ds.space_md`=20, `ds.space_lg`=32, etc.)
+- **TOUT** `setContentsMargins(a, b, c, d)`, `setSpacing(n)`, `setFixedWidth(n)` avec des nombres littéraux est interdit — utiliser `ds.space_*`, `SpacingToken`, ou `ds.sp()`
+- Exceptions : valeurs 0 (zéro) pour collapse et valeurs calculées dynamiquement
+
+### Tokens disponibles (`larccommon/design_system._DesignSystem` → singleton `ds`)
+```
+space_xxs=4  space_xs=8   space_sm=12  space_md=20
+space_lg=32  space_xl=52  space_xxl=84 space_xxxl=136
+field_height=52  button_height=52  header_height=52  table_row_min=32
+radius_xs=4  radius_sm=8  radius_md=12  radius_lg=20  border_width=1
+```
+QSS helpers intégrés dans `ds` : `ds.flat_input_qss()`, `ds.table_qss()`, `ds.panel_qss()`, `ds.label_qss()`
+
+### Résultat par projet
+
+| Projet | padding: QSS | setContentsMargins | setSpacing | setFixedWidth |
+|--------|:----------:|:-----------------:|:----------:|:------------:|
+| LarcSecretaire (focus) | 51 (dont 11 hard) | 28 (dont 10 hard) | 78 (dont 18 hard) | 0 hard |
+| LarcProf | 60 (dont 57 hard) | 38 (dont 30 hard) | 47 (dont 43 hard) | 4 hard |
+| LarcSuperviseur | 5 (tous hard) | 24 (dont 18 hard) | 40 (dont 25 hard) | 1 hard (sidebar 233px) |
+| LarcHub | 5 (tous hard) | 4 (tous hard) | 7 (tous hard) | 0 hard |
+| LarcDesign | 0 hard | 9 (dont 1 hard) | 12 (dont 3 hard) | 1 hard (sidebar 233px) |
+
+**Total hardcodé estimé : ~170 occurrences** à migrer vers ds.* tokens priorité basse (UI fonctionnelle).
+
+### Priorité
+1. **Haute** : LarcProf top bar (padding grid QSS vient d'être fixé en `ds.space_sm px ds.space_md px`)
+2. **Moyenne** : LarcSecretaire login (16 hard) + LarcHub login (14 hard) + LarcSuperviseur login (16 hard)
+3. **Basse** : le reste — audit complet fait, correction au fil des modifications UI
+
+### Fichier de référence
+`C:\Projets\LarcSecretaire\views\parent_manager.py` — **100% conforme** Design System (0 hardcoded).
 
 ## LarcSuperviseur — Architecture
 

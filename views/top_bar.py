@@ -274,7 +274,7 @@ class TopBar(QFrame):
 
     def _on_preferences(self):
         from LarcSuperviseur.common.session import session
-        from LarcSuperviseur.views.dialogs.preferences import PreferencesDialog
+        from larccommon.preferences_dialog import PreferencesDialog
 
         old_theme = theme_manager.active_name
         old_card = session.card_theme
