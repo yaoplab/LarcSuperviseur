@@ -68,6 +68,9 @@ python -m LarcDesign               # Designer (i18n, thèmes, rôles, logs, type
 - **Exceptions** : `QMessageBox`, `QApplication`, `QVBoxLayout`, `QHBoxLayout`, `QGridLayout`, `QButtonGroup`, `QTableWidgetItem` (pas de wrapper M3)
 - **Couleurs** : `theme_manager.phi_theme` pour widgets M3, `theme_manager.palette` pour QSS
 - **Icônes** : `from larccommon.icons import icon as md3_icon` → `md3_icon('name', color, size=18)`
+  - **INTERDIT** : images (PNG/JPG) comme icônes — toujours utiliser les SVG Material Design 3
+  - Tailles carrées uniquement, via `ds.icon_sm` (20), `ds.icon_md` (32), `ds.icon_lg` (52)
+  - Liste des 40 icônes disponibles : `light_mode`, `dark_mode`, `contrast`, `tonality`, `refresh`, `add`, `arrow_back`, `close`, `check`, `save`, `delete`, `edit`, `person`, `settings`, `menu`, `event`, `timer`, `calendar_today`, `schedule`, `cloud`, `wifi`, `wifi_off`, `warning`, `school`, `home`, `search`, `logout`, `filter_list`, `visibility`, `location_on`, `subject`, `description`, `bolt`, `lock`, `check_circle`, `cancel`, `sync`, `info`, `error`
 - **Tailles images** : `theme_manager.image.*` à la place de hardcoded
   - `image.logo=89`, `image.icon_btn=18`, `image.icon_menu=18`, `image.icon_large=32`
   - `image.theme_btn=34`, `image.profile_btn=34`, `image.refresh_btn=34`
@@ -78,6 +81,75 @@ python -m LarcDesign               # Designer (i18n, thèmes, rôles, logs, type
 - **Structure existante** : pour une nouvelle app, copier la structure d'une app existante (LarcSuperviseur login), ne pas réinventer
 - **Heritage fenêtre** : toujours `QWidget` pour une fenêtre autonome, jamais `M3Card`
 - **Pas de test framework, pas de linting** — lancer l'app pour vérifier
+
+## Design System — `larccommon/design_system.py`
+
+**RÈGLE ABSOLUE POUR TOUTE NOUVELLE CRÉATION UI : ZÉRO HARDCODING.**
+
+Toutes les tailles, espacements, couleurs, bordures doivent passer par le Design System :
+
+```python
+from larccommon.design_system import ds
+
+# Espacement — jamais setSpacing(12) ou setContentsMargins(6,6,6,6)
+layout.setSpacing(ds.space_sm)
+layout.setContentsMargins(ds.space_md, ds.space_md, ds.space_md, ds.space_md)
+
+# Hauteurs des champs — jamais setFixedHeight(52)
+field.setFixedHeight(ds.field_height)
+
+# Bordures — jamais border-radius: 8px; ou border: 1px solid #xxx
+field.setStyleSheet(ds.flat_input_qss())
+
+# Tableaux — harmonisés avec le formulaire
+table.setStyleSheet(ds.table_qss())
+
+# Couleurs — jamais #1565C0 ou #c0392b
+ds.p.primary, ds.p.surface, ds.p.error, ds.p.outline
+
+# Couleurs M3 — pour widgets phibuilder
+ds.c.primary, ds.c.on_surface, ds.c.outline_variant
+
+# Boutons — variants M3 standard
+M3Button("OK", theme=ds.phi, variant=ds.BTN_FILLED)
+
+# Fibonacci direct
+ds.sp(SpacingToken.XXL)   # 84 px
+```
+
+### Tokens rapides
+
+| Catégorie | Token | Valeur |
+|---|---|---|
+| Espacement | `ds.space_xs` / `ds.space_sm` / `ds.space_md` / `ds.space_xl` | 8 / 12 / 20 / 52 px |
+| Champs | `ds.field_height` | 52 px |
+| Boutons | `ds.button_height` / `ds.icon_lg` | 52 px |
+| Bordures | `ds.radius_xs` / `ds.radius_sm` / `ds.border_width` | 4 / 8 / 1 px |
+| Polices | `ds.font_title` / `ds.font_body` / `ds.font_small` | 14 / 13 / 11 px |
+| Tableaux | `ds.table_row_min` / `ds.table_qss()` | 32 px |
+
+### Pattern standard pour un formulaire
+
+```python
+phi = theme_manager.phi_theme
+sp = phi.spacing.spacing
+p = theme_manager.palette
+_fh = ds.field_height   # 52 px
+
+# Card identité
+card = M3Card(theme=phi, variant=ds.CARD_ELEVATED)
+cl = card.content_layout()
+cl.setSpacing(ds.space_sm)
+
+field = M3TextField(theme=phi)
+field.setFixedHeight(_fh)
+field.setStyleSheet(ds.flat_input_qss())
+
+# Tableau
+table = M3TableWidget(theme=phi)
+table.setStyleSheet(ds.table_qss())
+table.horizontalHeader().setFixedHeight(ds.space_lg)
+```
 
 ## LarcSuperviseur — Architecture
 
@@ -413,3 +485,36 @@ _BTN_VIEW = {
 🚧 **Login partage** : larccommon/login.py avec callbacks on_intranet_login, on_cloud_login, 	itle_prefix, subtitle. LarcSuperviseur pas encore branche.
 
 ⚠ **LarcSecretaire** : dossier_panel.py encore en M3 widgets (non converti).
+
+## Audit padding/margin (10/07/2026)
+
+### Règle absolue
+- **TOUTE** valeur de padding/margin/spacing dans QSS doit utiliser les tokens `ds.*` (`ds.space_xxs`=4, `ds.space_xs`=8, `ds.space_sm`=12, `ds.space_md`=20, `ds.space_lg`=32, etc.)
+- **TOUT** `setContentsMargins(a, b, c, d)`, `setSpacing(n)`, `setFixedWidth(n)` avec des nombres littéraux est interdit — utiliser `ds.space_*`, `SpacingToken`, ou `ds.sp()`
+- Exceptions : valeurs 0 (zéro) pour collapse et valeurs calculées dynamiquement
+
+### Tokens disponibles (`larccommon/design_system._DesignSystem` → singleton `ds`)
+```
+space_xxs=4  space_xs=8   space_sm=12  space_md=20
+space_lg=32  space_xl=52  space_xxl=84 space_xxxl=136
+field_height=52  button_height=52  header_height=52  table_row_min=32
+radius_xs=4  radius_sm=8  radius_md=12  radius_lg=20  border_width=1
+```
+QSS helpers intégrés dans `ds` : `ds.flat_input_qss()`, `ds.table_qss()`, `ds.panel_qss()`, `ds.label_qss()`
+
+### Résultat par projet
+
+| Projet | padding: QSS | setContentsMargins | setSpacing | setFixedWidth |
+|--------|:----------:|:-----------------:|:----------:|:------------:|
+| LarcSuperviseur | 24 (dont 14 hard) | 37 (dont 33 hard) | 32 (dont 26 hard) | 1 hard (sidebar 233px) |
+| LarcSecretaire | 51 (dont 11 hard) | 28 (dont 10 hard) | 78 (dont 18 hard) | 0 hard |
+| LarcProf | 60 (dont 57 hard) | 38 (dont 30 hard) | 47 (dont 43 hard) | 4 hard |
+| LarcHub | 5 (tous hard) | 4 (tous hard) | 7 (tous hard) | 0 hard |
+| LarcDesign | 0 hard | 9 (dont 1 hard) | 12 (dont 3 hard) | 1 hard (sidebar 233px) |
+
+**Total hardcodé estimé : ~170 occurrences** à migrer vers ds.* tokens priorité basse (UI fonctionnelle).
+
+### Priorité
+1. **Haute** : LarcProf top bar (padding grid QSS vient d'être fixé en `ds.space_sm px ds.space_md px`)
+2. **Moyenne** : LarcSuperviseur sidebar 233px, LarcHub login padding
+3. **Basse** : le reste — audit complet fait, correction au fil des modifications UI
