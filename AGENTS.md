@@ -547,35 +547,24 @@ _BTN_VIEW = {
 
 ⚠ **LarcSecretaire** : dossier_panel.py encore en M3 widgets (non converti).
 
-## Audit padding/margin (10/07/2026)
+## Mise à jour 10/07/2026
 
-### Règle absolue
-- **TOUTE** valeur de padding/margin/spacing dans QSS doit utiliser les tokens `ds.*` (`ds.space_xxs`=4, `ds.space_xs`=8, `ds.space_sm`=12, `ds.space_md`=20, `ds.space_lg`=32, etc.)
-- **TOUT** `setContentsMargins(a, b, c, d)`, `setSpacing(n)`, `setFixedWidth(n)` avec des nombres littéraux est interdit — utiliser `ds.space_*`, `SpacingToken`, ou `ds.sp()`
-- Exceptions : valeurs 0 (zéro) pour collapse et valeurs calculées dynamiquement
+✅ **Terminé (LarcProf)** :
+- **Gradient pastel** notes : rouge(0)→blanc(milieu)→vert(max), visible via ColorItem + ColorDelegate
+- **Nature dans top bar** : remplace le doublon label DB par la nature réelle
+- **Critères par évaluation** : seules les colonnes des critères activés pour chaque éval sont affichées
+- **EditTriggers Excel-like** : `AnyKeyPressed`, clic simple, flèches de navigation
+- **Tri Nom/Prénom** : clic sur l'en-tête bascule entre "Nom Prénom" et "Prénom Nom"
+- **Cellules centrées** + **padding** via tokens `ds`
+- **Boutons adaptatifs** : "Enregistrer" (hors ligne) vs "Synchroniser" (en ligne)
+- **Sauvegarde locale** : corrigée — `learner_has_termsubject_ptr_id` au lieu de `fk_student_id`
+- **Fenêtre maximisée** : `showMaximized()` au lancement depuis home_window
+- **Sync perf** : commit unique par table (plus par cellule), log verbeux retiré
+- **EvalManager** : `take_teacher_data` ajouté dans `_on_create` (base vide corrigée)
+- **sync_state** : migration + non-bloquant (ne rollback plus la transaction)
+- **Traces [INIT]** : visibilité sur la création/peuplement SQLite
+- **Disconnect warning** : connecté une fois dans `_build_students_grid`, plus de disconnect
 
-### Tokens disponibles (`larccommon/design_system._DesignSystem` → singleton `ds`)
-```
-space_xxs=4  space_xs=8   space_sm=12  space_md=20
-space_lg=32  space_xl=52  space_xxl=84 space_xxxl=136
-field_height=52  button_height=52  header_height=52  table_row_min=32
-radius_xs=4  radius_sm=8  radius_md=12  radius_lg=20  border_width=1
-```
-QSS helpers intégrés dans `ds` : `ds.flat_input_qss()`, `ds.table_qss()`, `ds.panel_qss()`, `ds.label_qss()`
-
-### Résultat par projet
-
-| Projet | padding: QSS | setContentsMargins | setSpacing | setFixedWidth |
-|--------|:----------:|:-----------------:|:----------:|:------------:|
-| LarcSuperviseur | 24 (dont 14 hard) | 37 (dont 33 hard) | 32 (dont 26 hard) | 1 hard (sidebar 233px) |
-| LarcSecretaire | 51 (dont 11 hard) | 28 (dont 10 hard) | 78 (dont 18 hard) | 0 hard |
-| LarcProf | 60 (dont 57 hard) | 38 (dont 30 hard) | 47 (dont 43 hard) | 4 hard |
-| LarcHub | 5 (tous hard) | 4 (tous hard) | 7 (tous hard) | 0 hard |
-| LarcDesign | 0 hard | 9 (dont 1 hard) | 12 (dont 3 hard) | 1 hard (sidebar 233px) |
-
-**Total hardcodé estimé : ~170 occurrences** à migrer vers ds.* tokens priorité basse (UI fonctionnelle).
-
-### Priorité
-1. **Haute** : LarcProf top bar (padding grid QSS vient d'être fixé en `ds.space_sm px ds.space_md px`)
-2. **Moyenne** : LarcSuperviseur sidebar 233px, LarcHub login padding
-3. **Basse** : le reste — audit complet fait, correction au fil des modifications UI
+🚧 **Restant** :
+- Sync `pull_push` lent sur grosses tables (>10K lignes) — diff `compute_cell_diff` lit toutes les lignes × colonnes
+- EvalManager ne fait que UPDATE (pas INSERT) — création d'évaluation nécessite le serveur
