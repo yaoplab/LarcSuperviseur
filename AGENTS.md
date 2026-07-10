@@ -1,4 +1,4 @@
-﻿# AGENTS.md — Projets Larc (Mise à jour 09/07/2026)
+﻿# AGENTS.md — Projets Larc (Mise à jour 10/07/2026)
 
 ## What this is
 
@@ -446,6 +446,21 @@ _BTN_VIEW = {
   `status.intranet`, `status.cloud`
 - Attention : ne pas utiliser `_` comme variable throwaway (écrase la fonction i18n)
   → utiliser `_outer`, `_ignored` à la place
+
+## Mise à jour 10/07/2026
+
+✅ **Terminé** :
+- **design_system.py** : singleton `ds` avec tous les tokens dynamiques (Fibonacci, espacements, hauteurs, bordures, couleurs, QSS helpers, golden ratio)
+- **LarcSecretaire Design System refactor** : student_form (M3Card identity/address/parents), parent_manager (ParentEditDialog + ParentManager), supervisor_panel (52px buttons), dossier_panel, password, login
+- **phi_theme** déployé partout : `theme_manager.phi_theme` remplace `phibuilder.theme if ... else None`
+- **PreferencesDialog** partagé dans LarcCommon (langue, thème, taille vignettes)
+- **i18n** : +18 clés prof_login, +20 clés profile, +2 clés menu (topbar.my_profile, sec_main.preferences)
+- **AGENTS.md** : section Design System complète + audit padding/margin + règles icônes + règles padding champs
+- **Pushed** : LarcCommon, LarcSecretaire, LarcSuperviseur, LarcProf
+
+🚧 **Restant LarcSecretaire** :
+- ~72 hardcodings restants (padding QSS, setSpacing, etc.) — priorité basse, UI fonctionnelle
+- Fichier de référence : `parent_manager.py` → 0 hardcoded
 
 ## Mise à jour 09/07/2026
 
